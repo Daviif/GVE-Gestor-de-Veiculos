@@ -43,20 +43,26 @@ module.exports = async ({ github, context, core }) => {
 
   if (eventName === 'pull_request') {
     const pr = payload.pull_request;
+    const mesclado = payload.action === 'closed' && pr.merged;
+    if (payload.action === 'closed' && !pr.merged) return;
+
+    // Release: dev mesclada em main promove tudo que estava em homologação.
+    if (pr.base.ref === 'main' && pr.head.ref === 'dev') {
+      if (mesclado) await promoverHomologacao();
+      return;
+    }
+
     const numeros = issuesDoPr(pr);
     if (numeros.length === 0) {
       core.notice('PR sem "Closes #nº" nem branch feat/<nº>-…: nenhuma issue movida.');
       return;
     }
-    const mesclado = payload.action === 'closed' && pr.merged;
-    if (payload.action === 'closed' && !pr.merged) return;
-    const status = mesclado ? STATUS.homologacao : STATUS.andamento;
+    let status = STATUS.andamento;
+    if (mesclado) status = pr.base.ref === 'main' ? STATUS.concluido : STATUS.homologacao;
     for (const numero of numeros) await moverIssue(numero, status);
-    return;
   }
 
-  if (eventName === 'push') {
-    // Merge de dev em main: tudo que estava em homologação vai para produção.
+  async function promoverHomologacao() {
     const itens = await itensDoProjeto(github, projeto.id);
     for (const item of itens) {
       const issue = item.content;

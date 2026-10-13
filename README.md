@@ -33,7 +33,8 @@ As tarefas ficam no GitHub Projects do repositório, uma issue por tarefa. O Sta
 | Issue criada | Backlog |
 | Branch `feat/<nº>-…` criada ou PR para `dev` aberto | Em andamento |
 | PR mesclado em `dev` | Em homologação (dev) |
-| `dev` mesclada em `main` | Concluído (main), e a issue é fechada |
+| PR de `dev` mesclado em `main` | Concluído (main) para tudo que estava em homologação, e as issues são fechadas |
+| PR de hotfix mesclado em `main` | Concluído (main) só para as issues citadas no PR |
 
 O PR deve citar a issue com `Closes #<nº>` (o modelo de PR já traz a linha). Mover para "A fazer" é manual: é a priorização da equipe.
 

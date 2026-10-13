@@ -5,7 +5,8 @@ name: Quadro do projeto
 #   branch feat/<nº>-… criada          → Em andamento
 #   PR para dev aberto (Closes #nº)    → Em andamento
 #   PR mesclado em dev                 → Em homologação (dev)
-#   push em main (merge de dev)        → Concluído (main) e issue fechada
+#   PR de dev mesclado em main         → tudo em homologação vai para Concluído (main) e é fechado
+#   PR de hotfix mesclado em main      → só as issues citadas no PR vão para Concluído (main)
 #   issue fechada como concluída       → Concluído (main)
 # Requer o secret PROJECT_TOKEN (token clássico com escopos `repo` e `project`).
 
@@ -15,9 +16,7 @@ on:
   create:
   pull_request:
     types: [opened, reopened, ready_for_review, closed]
-    branches: [dev]
-  push:
-    branches: [main]
+    branches: [dev, main]
 
 concurrency:
   group: quadro
