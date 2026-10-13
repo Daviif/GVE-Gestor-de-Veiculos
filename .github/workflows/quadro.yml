@@ -1,0 +1,47 @@
+name: Quadro do projeto
+
+# Mantém o Status das issues no GitHub Projects de acordo com o fluxo de branches:
+#   issue aberta                      → Backlog
+#   branch feat/<nº>-… criada          → Em andamento
+#   PR para dev aberto (Closes #nº)    → Em andamento
+#   PR mesclado em dev                 → Em homologação (dev)
+#   PR de dev mesclado em main         → tudo em homologação vai para Concluído (main) e é fechado
+#   PR de hotfix mesclado em main      → só as issues citadas no PR vão para Concluído (main)
+#   issue fechada como concluída       → Concluído (main)
+# Requer o secret PROJECT_TOKEN (token clássico com escopos `repo` e `project`).
+
+on:
+  issues:
+    types: [opened, reopened, closed]
+  create:
+  pull_request:
+    types: [opened, reopened, ready_for_review, closed]
+    branches: [dev, main]
+
+concurrency:
+  group: quadro
+  cancel-in-progress: false
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+    steps:
+      - name: Verificar token
+        if: env.PROJECT_TOKEN == ''
+        run: echo "::warning::Secret PROJECT_TOKEN não configurado; o quadro não foi atualizado."
+      - uses: actions/checkout@v7
+        if: env.PROJECT_TOKEN != ''
+        with:
+          sparse-checkout: .github/scripts
+      - uses: actions/github-script@v9
+        if: env.PROJECT_TOKEN != ''
+        env:
+          PROJECT_OWNER: Daviif
+          PROJECT_NUMBER: '2'
+        with:
+          github-token: ${{ env.PROJECT_TOKEN }}
+          script: |
+            const quadro = require('./.github/scripts/quadro.cjs');
+            await quadro({ github, context, core });

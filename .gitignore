@@ -1,6 +1,4 @@
-# Documentos das disciplinas (CSI991 e CSI606) — fora do repositório
-Projeto Integrador/
-Sistemas Web/
+# Documentos locais — fora do repositório
 *.pdf
 *.docx
 *.pptx
@@ -22,3 +20,4 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+*.tsbuildinfo

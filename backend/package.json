@@ -1,0 +1,27 @@
+{
+  "name": "@gve/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsup",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@gve/shared": "*",
+    "express": "^5.1.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@types/supertest": "^6.0.0",
+    "supertest": "^7.1.0",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.0",
+    "vitest": "^5.0.0"
+  }
+}
