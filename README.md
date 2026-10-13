@@ -20,13 +20,24 @@ Sistema web para agendamento da frota da Secretaria Municipal de Educação de B
 | --- | --- |
 | `main` | Versão final, estável. Recebe apenas merges vindos de `dev`. |
 | `dev` | Homologação. Recebe os pull requests das branches de tarefa. |
-| `feat/<tarefa>`, `fix/<tarefa>` | Uma branch por tarefa do quadro, criada a partir de `dev`. |
+| `feat/<nº>-<descrição>`, `fix/<nº>-<descrição>` | Uma branch por issue do quadro, criada a partir de `dev` (ex.: `feat/10-autenticacao`). |
 
 Fluxo: `feat/*` → PR para `dev` → testes de homologação → PR de `dev` para `main`.
 
 ## Acompanhamento
 
-As tarefas (a fazer, em andamento, concluídas) ficam no GitHub Projects do repositório. Cada tarefa é uma issue; o PR que a resolve deve citar `Closes #<número>`.
+As tarefas ficam no GitHub Projects do repositório, uma issue por tarefa. O Status é atualizado automaticamente (`.github/workflows/quadro.yml`):
+
+| Evento | Status da issue |
+| --- | --- |
+| Issue criada | Backlog |
+| Branch `feat/<nº>-…` criada ou PR para `dev` aberto | Em andamento |
+| PR mesclado em `dev` | Em homologação (dev) |
+| `dev` mesclada em `main` | Concluído (main), e a issue é fechada |
+
+O PR deve citar a issue com `Closes #<nº>` (o modelo de PR já traz a linha). Mover para "A fazer" é manual: é a priorização da equipe.
+
+Todo PR para `dev` ou `main` passa pelo CI (`.github/workflows/ci.yml`): formatação, lint, tipos, testes e build.
 
 ## Estrutura
 
