@@ -38,7 +38,7 @@ shared/     Esquemas Zod e tipos usados pelos dois
 
 ## Desenvolvimento
 
-Pré-requisitos: Node.js 22 e Docker.
+Pré-requisitos: Node.js 22.13 ou superior e Docker.
 
 ```bash
 cp .env.example .env     # variáveis locais
