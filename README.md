@@ -2,7 +2,7 @@
 
 Sistema web para agendamento da frota da Secretaria Municipal de Educação de Barão de Cocais (MG): servidores reservam um veículo por data e turno, e o sistema impede que o mesmo carro seja reservado duas vezes no mesmo turno.
 
-**Dupla:** João Vitor Cota Silva e Davi Emílio de Paula Fonseca — UFOP (CSI991 Projeto Integrador II e CSI606 Sistemas WEB I).
+**Dupla:** João Vitor Cota Silva e Davi Emílio de Paula Fonseca — UFOP
 
 ## Stack
 
