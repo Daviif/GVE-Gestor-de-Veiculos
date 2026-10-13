@@ -1,0 +1,24 @@
+# Documentos das disciplinas (CSI991 e CSI606) — fora do repositório
+Projeto Integrador/
+Sistemas Web/
+*.pdf
+*.docx
+*.pptx
+
+# Dependências e builds
+node_modules/
+dist/
+build/
+coverage/
+
+# Variáveis de ambiente
+.env
+.env.*
+!.env.example
+
+# Sistema e editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
