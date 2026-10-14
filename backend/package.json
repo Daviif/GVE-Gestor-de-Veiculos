@@ -8,17 +8,29 @@
     "build": "tsup",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "postinstall": "prisma generate",
+    "db:migrate": "prisma generate && prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "db:reset": "prisma migrate reset && prisma db seed",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
     "@gve/shared": "*",
+    "@node-rs/argon2": "^2.2.2",
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
     "express": "^5.1.0",
+    "pg": "^8.23.1",
     "zod": "^4.1.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/node": "^22.0.0",
+    "@types/pg": "^8.23.1",
     "@types/supertest": "^6.0.0",
+    "prisma": "^7.10.0",
     "supertest": "^7.1.0",
     "tsup": "^8.5.0",
     "tsx": "^4.20.0",
