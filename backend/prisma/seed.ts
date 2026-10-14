@@ -1,5 +1,5 @@
 // Seed idempotente: pode rodar várias vezes sem duplicar nem sobrescrever dados.
-// Uso: npm run db:seed (ou automaticamente após `prisma migrate reset`).
+// Uso: npm run db:seed (o db:reset também roda; no Prisma 7 o seed não é automático).
 
 import { config } from '../src/config';
 import { prisma } from '../src/db';
