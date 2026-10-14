@@ -1,0 +1,163 @@
+// Modelo de dados do GVE. Tabelas e colunas em snake_case no banco; camelCase no código.
+// O check de cancelamento da reserva fica no SQL da migração (o Prisma não modela CHECK).
+
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Perfil {
+  ADMINISTRADOR
+  SERVIDOR
+
+  @@map("perfil")
+}
+
+enum Turno {
+  MATUTINO
+  VESPERTINO
+
+  @@map("turno")
+}
+
+enum StatusReserva {
+  ATIVA
+  CANCELADA
+
+  @@map("status_reserva")
+}
+
+enum AbrangenciaFeriado {
+  NACIONAL
+  ESTADUAL
+  MUNICIPAL
+
+  @@map("abrangencia_feriado")
+}
+
+enum AcaoAuditoria {
+  LOGIN
+  LOGIN_FALHA
+  LOGOUT
+  SENHA_ALTERADA
+  SENHA_REDEFINIDA
+  USUARIO_CRIADO
+  USUARIO_EDITADO
+  USUARIO_ATIVADO
+  USUARIO_DESATIVADO
+  VEICULO_CRIADO
+  VEICULO_EDITADO
+  VEICULO_ATIVADO
+  VEICULO_DESATIVADO
+  RESERVA_CRIADA
+  RESERVA_CANCELADA
+  FERIADO_CRIADO
+  FERIADO_REMOVIDO
+  FERIADOS_IMPORTADOS
+
+  @@map("acao_auditoria")
+}
+
+/// RF03, RN08, RN10: cadastrado pelo administrador; desativado, nunca excluído.
+model Usuario {
+  id                    Int      @id @default(autoincrement())
+  nome                  String   @db.VarChar(120)
+  email                 String   @unique @db.VarChar(254)
+  /// Só os 11 dígitos, sem máscara.
+  cpf                   String   @unique @db.Char(11)
+  /// Argon2id (RNF06).
+  senhaHash             String   @map("senha_hash")
+  perfil                Perfil   @default(SERVIDOR)
+  ativo                 Boolean  @default(true)
+  /// Ligado no cadastro e na redefinição pelo administrador (RF04).
+  trocaSenhaObrigatoria Boolean  @default(true) @map("troca_senha_obrigatoria")
+  criadoEm              DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm          DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  reservas             Reserva[]      @relation("ReservaUsuario")
+  reservasCanceladas   Reserva[]      @relation("ReservaCanceladaPor")
+  feriadosCadastrados  Feriado[]
+  registrosDeAuditoria LogAuditoria[]
+
+  @@map("usuario")
+}
+
+/// RF05, RN09, RN10: placa única; desativado, nunca excluído.
+model Veiculo {
+  id           Int      @id @default(autoincrement())
+  /// Maiúsculas, sem hífen: ABC1234 (antiga) ou ABC1D23 (Mercosul).
+  placa        String   @unique @db.Char(7)
+  modelo       String   @db.VarChar(80)
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  reservas Reserva[]
+
+  @@map("veiculo")
+}
+
+/// RF06, RN01, RN04, RN06. Cancelar não apaga: muda o status e registra quem e quando (RF15).
+model Reserva {
+  id             Int           @id @default(autoincrement())
+  veiculoId      Int           @map("veiculo_id")
+  usuarioId      Int           @map("usuario_id")
+  /// Data local (America/Sao_Paulo), sem hora.
+  data           DateTime      @db.Date
+  turno          Turno
+  destino        String        @db.VarChar(200)
+  status         StatusReserva @default(ATIVA)
+  criadoEm       DateTime      @default(now()) @map("criado_em") @db.Timestamptz(3)
+  canceladoEm    DateTime?     @map("cancelado_em") @db.Timestamptz(3)
+  canceladoPorId Int?          @map("cancelado_por_id")
+
+  veiculo      Veiculo  @relation(fields: [veiculoId], references: [id], onDelete: Restrict)
+  usuario      Usuario  @relation("ReservaUsuario", fields: [usuarioId], references: [id], onDelete: Restrict)
+  canceladoPor Usuario? @relation("ReservaCanceladaPor", fields: [canceladoPorId], references: [id], onDelete: Restrict)
+
+  /// RN01, RNF09: uma reserva ativa por veículo, data e turno, garantida pelo banco.
+  @@unique([veiculoId, data, turno], map: "reserva_ativa_unica", where: raw("status = 'ATIVA'"))
+  @@index([data, turno])
+  @@index([usuarioId, data])
+  @@map("reserva")
+}
+
+/// RF17, RN11: dias sem reserva.
+model Feriado {
+  id          Int                @id @default(autoincrement())
+  data        DateTime           @unique @db.Date
+  descricao   String             @db.VarChar(120)
+  abrangencia AbrangenciaFeriado
+  criadoPorId Int?               @map("criado_por_id")
+  criadoEm    DateTime           @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  criadoPor Usuario? @relation(fields: [criadoPorId], references: [id], onDelete: Restrict)
+
+  @@map("feriado")
+}
+
+/// RF15, RF16: trilha de auditoria; só recebe inserções.
+model LogAuditoria {
+  id         BigInt        @id @default(autoincrement())
+  /// Nulo quando não há usuário identificado (ex.: login com e-mail inexistente).
+  usuarioId  Int?          @map("usuario_id")
+  acao       AcaoAuditoria
+  /// Tabela afetada (usuario, veiculo, reserva, feriado).
+  entidade   String?       @db.VarChar(30)
+  entidadeId Int?          @map("entidade_id")
+  detalhes   Json?
+  ip         String?       @db.VarChar(45)
+  criadoEm   DateTime      @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  usuario Usuario? @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([criadoEm])
+  @@index([usuarioId, criadoEm])
+  @@index([entidade, entidadeId])
+  @@map("log_auditoria")
+}

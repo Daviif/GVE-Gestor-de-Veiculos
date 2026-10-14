@@ -56,6 +56,8 @@ Pré-requisitos: Node.js 22.13 ou superior e Docker.
 cp .env.example .env     # variáveis locais
 npm install              # instala backend, frontend e shared
 npm run db:up            # sobe o PostgreSQL no Docker
+npm run db:migrate       # aplica as migrações
+npm run db:seed          # cria o administrador e 3 veículos de exemplo
 npm run dev              # backend em :3333 e frontend em :5173
 ```
 
@@ -67,4 +69,8 @@ npm run dev              # backend em :3333 e frontend em :5173
 | `npm run lint` | ESLint |
 | `npm run format` | Formata o código com Prettier |
 | `npm run build` | Build de produção (`backend/dist` e `frontend/dist`) |
+| `npm run db:migrate` | Aplica as migrações; com `-- --name <nome>`, cria uma nova a partir do `schema.prisma` |
+| `npm run db:seed` | Administrador (`admin@gve.local` / `admin123`, troca no 1º acesso) e veículos de exemplo |
+| `npm run db:reset` | Apaga o banco local, reaplica as migrações e roda o seed |
+| `npm run db:studio` | Abre o Prisma Studio para ver os dados |
 | `npm run db:down` | Para o banco |
