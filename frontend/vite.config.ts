@@ -5,6 +5,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    // Escuta em todas as interfaces, para abrir o app de outro aparelho da rede.
+    host: true,
     // Em desenvolvimento, /api vai para o backend; em produção quem faz isso é o Nginx.
     proxy: { '/api': 'http://localhost:3333' },
   },

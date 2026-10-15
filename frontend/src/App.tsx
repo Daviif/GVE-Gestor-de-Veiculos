@@ -1,27 +1,48 @@
-import { useEffect, useState } from 'react';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
+import { RotaProtegida } from './auth/RotaProtegida';
+import { ProvedorSessao } from './auth/sessao';
+import { Layout } from './componentes/Layout';
+import { itensAdmin } from './componentes/navegacao';
+import { EmConstrucao } from './paginas/EmConstrucao';
+import { Login } from './paginas/Login';
+import { MinhaConta } from './paginas/MinhaConta';
+import { MinhasReservas } from './paginas/MinhasReservas';
+import { TrocaSenha } from './paginas/TrocaSenha';
+import { ProvedorToast } from './toast/ProvedorToast';
 
-type EstadoApi = 'verificando' | 'conectada' | 'indisponivel';
-
-const textoEstado: Record<EstadoApi, string> = {
-  verificando: 'Verificando conexão com o servidor…',
-  conectada: 'Servidor conectado.',
-  indisponivel: 'Servidor indisponível.',
-};
+export function Rotas() {
+  return (
+    <Routes>
+      <Route path="/entrar" element={<Login />} />
+      <Route element={<RotaProtegida trocaSenha />}>
+        <Route path="/trocar-senha" element={<TrocaSenha />} />
+      </Route>
+      <Route element={<RotaProtegida />}>
+        <Route element={<Layout />}>
+          <Route index element={<MinhasReservas />} />
+          <Route path="/reservas/nova" element={<EmConstrucao />} />
+          <Route path="/agenda" element={<EmConstrucao />} />
+          <Route path="/conta" element={<MinhaConta />} />
+          <Route element={<RotaProtegida perfil="ADMINISTRADOR" />}>
+            {itensAdmin.map((item) => (
+              <Route key={item.caminho} path={item.caminho} element={<EmConstrucao />} />
+            ))}
+          </Route>
+        </Route>
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
 
 export function App() {
-  const [estado, setEstado] = useState<EstadoApi>('verificando');
-
-  useEffect(() => {
-    fetch('/api/v1/saude')
-      .then((resposta) => setEstado(resposta.ok ? 'conectada' : 'indisponivel'))
-      .catch(() => setEstado('indisponivel'));
-  }, []);
-
   return (
-    <main className="pagina">
-      <h1>Gestão Veicular</h1>
-      <p>Secretaria Municipal de Educação de Barão de Cocais</p>
-      <p role="status">{textoEstado[estado]}</p>
-    </main>
+    <BrowserRouter>
+      <ProvedorToast>
+        <ProvedorSessao>
+          <Rotas />
+        </ProvedorSessao>
+      </ProvedorToast>
+    </BrowserRouter>
   );
 }
