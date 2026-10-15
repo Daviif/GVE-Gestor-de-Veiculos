@@ -83,8 +83,25 @@ model Usuario {
   reservasCanceladas   Reserva[]      @relation("ReservaCanceladaPor")
   feriadosCadastrados  Feriado[]
   registrosDeAuditoria LogAuditoria[]
+  sessoes              Sessao[]
 
   @@map("usuario")
+}
+
+/// RF01, RF02, RNF11: sessão aberta no login. O cookie leva o token; o banco guarda só o hash.
+model Sessao {
+  /// SHA-256 do token, em hexadecimal.
+  id        String   @id @db.Char(64)
+  usuarioId Int      @map("usuario_id")
+  criadoEm  DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  /// Renovada a cada uso; vence após 30 min sem uso.
+  expiraEm  DateTime @map("expira_em") @db.Timestamptz(3)
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@index([expiraEm])
+  @@map("sessao")
 }
 
 /// RF05, RN09, RN10: placa única; desativado, nunca excluído.
