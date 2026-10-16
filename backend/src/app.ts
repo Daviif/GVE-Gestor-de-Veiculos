@@ -3,6 +3,7 @@ import { config } from './config';
 import { rotaNaoEncontrada, tratarErros } from './middleware/erros';
 import { rotasAuth } from './routes/auth';
 import { rotasSaude } from './routes/saude';
+import { rotasUsuarios } from './routes/usuarios';
 
 export function criarApp() {
   const app = express();
@@ -14,6 +15,7 @@ export function criarApp() {
 
   app.use('/api/v1/saude', rotasSaude);
   app.use('/api/v1/auth', rotasAuth);
+  app.use('/api/v1/usuarios', rotasUsuarios);
 
   app.use('/api', rotaNaoEncontrada);
   app.use(tratarErros);
