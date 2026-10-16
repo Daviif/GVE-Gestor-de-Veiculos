@@ -14,6 +14,23 @@ jobs:
   verificar:
     name: Formatação, lint, tipos, testes e build
     runs-on: ubuntu-latest
+    # Os testes do backend usam um PostgreSQL de verdade (banco gve_teste, criado pelos testes).
+    services:
+      db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: gve
+          POSTGRES_PASSWORD: gve
+          POSTGRES_DB: gve
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gve -d gve"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://gve:gve@localhost:5432/gve
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
