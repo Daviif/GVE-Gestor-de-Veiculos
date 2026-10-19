@@ -1,11 +1,19 @@
 import {
+  cancelamentoSchema,
   disponibilidadeQuerySchema,
   novaReservaSchema,
   type Reserva,
   type VeiculoDisponivel,
 } from '@gve/shared';
 import { Router } from 'express';
-import { deDataBanco, dentroDaJanela, janelaDeDatas, paraDataBanco } from '../datas';
+import { z } from 'zod';
+import {
+  deDataBanco,
+  dentroDaJanela,
+  hojeEmSaoPaulo,
+  janelaDeDatas,
+  paraDataBanco,
+} from '../datas';
 import { prisma } from '../db';
 import { Prisma } from '../generated/prisma/client';
 import { autenticar } from '../middleware/autenticacao';
@@ -130,4 +138,126 @@ rotasReservas.post('/', async (req, res) => {
     }
     throw erro;
   }
+});
+
+/** Converte a linha do banco (com join do veículo) para o shape público da API. */
+function paraReservaPublica(r: {
+  id: number;
+  data: Date;
+  turno: Reserva['turno'];
+  destino: string;
+  status: Reserva['status'];
+  veiculo: { id: number; placa: string; modelo: string };
+}): Reserva {
+  return {
+    id: r.id,
+    data: deDataBanco(r.data),
+    turno: r.turno,
+    destino: r.destino,
+    status: r.status,
+    veiculo: r.veiculo,
+  };
+}
+
+/** Reservas do usuário logado (RF10): as próximas vêm primeiro, depois o histórico. */
+rotasReservas.get('/minhas', async (req, res) => {
+  const reservas = await prisma.reserva.findMany({
+    where: { usuarioId: req.usuario!.id },
+    orderBy: [{ data: 'desc' }, { turno: 'asc' }],
+    select: {
+      id: true,
+      data: true,
+      turno: true,
+      destino: true,
+      status: true,
+      veiculo: { select: { id: true, placa: true, modelo: true } },
+    },
+  });
+  res.json({ reservas: reservas.map(paraReservaPublica) });
+});
+
+/**
+ * Cancela a reserva (RF11, RF12, RN05). O autor cancela sem motivo; um administrador que
+ * cancela a reserva de outro deve informar o motivo (fica na auditoria, RF15).
+ */
+rotasReservas.post('/:id/cancelar', async (req, res) => {
+  const idParam = z.coerce.number().int().positive().safeParse(req.params.id);
+  const reserva = idParam.success
+    ? await prisma.reserva.findUnique({
+        where: { id: idParam.data },
+        select: {
+          id: true,
+          usuarioId: true,
+          data: true,
+          turno: true,
+          destino: true,
+          status: true,
+          veiculo: { select: { id: true, placa: true, modelo: true } },
+        },
+      })
+    : null;
+  if (!reserva) throw new ErroApi(404, 'NAO_ENCONTRADO', 'Reserva não encontrada.');
+
+  const usuario = req.usuario!;
+  const dono = reserva.usuarioId === usuario.id;
+  const admin = usuario.perfil === 'ADMINISTRADOR';
+  if (!dono && !admin) {
+    throw new ErroApi(403, 'SEM_PERMISSAO', 'Você só pode cancelar as suas próprias reservas.');
+  }
+
+  if (reserva.status === 'CANCELADA') {
+    throw new ErroApi(409, 'JA_CANCELADA', 'Esta reserva já foi cancelada.');
+  }
+  // Reserva passada não pode ser cancelada (RN05): só serve para o histórico.
+  if (deDataBanco(reserva.data) < hojeEmSaoPaulo()) {
+    throw new ErroApi(409, 'RESERVA_PASSADA', 'Não dá para cancelar uma reserva que já ocorreu.');
+  }
+
+  const entrada = cancelamentoSchema.parse(req.body ?? {});
+  const motivo = entrada.motivo?.trim() || undefined;
+  if (!dono && !motivo) {
+    throw new ErroApi(
+      400,
+      'MOTIVO_OBRIGATORIO',
+      'Informe o motivo para cancelar a reserva de outro usuário.',
+    );
+  }
+
+  const atualizada = await prisma.$transaction(async (tx) => {
+    const r = await tx.reserva.update({
+      where: { id: reserva.id },
+      data: {
+        status: 'CANCELADA',
+        canceladoEm: new Date(),
+        canceladoPorId: usuario.id,
+      },
+      select: {
+        id: true,
+        data: true,
+        turno: true,
+        destino: true,
+        status: true,
+        veiculo: { select: { id: true, placa: true, modelo: true } },
+      },
+    });
+    await tx.logAuditoria.create({
+      data: {
+        acao: 'RESERVA_CANCELADA',
+        usuarioId: usuario.id,
+        entidade: 'reserva',
+        entidadeId: reserva.id,
+        detalhes: {
+          dono: reserva.usuarioId,
+          veiculoId: reserva.veiculo.id,
+          data: deDataBanco(reserva.data),
+          turno: reserva.turno,
+          ...(motivo ? { motivo } : {}),
+        },
+        ip: req.ip,
+      },
+    });
+    return r;
+  });
+
+  res.json({ reserva: paraReservaPublica(atualizada) });
 });

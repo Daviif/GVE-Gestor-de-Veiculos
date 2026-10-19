@@ -11,23 +11,27 @@ const SENHA = 'senha-boa-123';
 const [DATA1, DATA2, DATA3] = janelaDeDatas(); // D+5, D+6, D+7
 const DATA_FORA = somarDias(hojeEmSaoPaulo(), 2); // D+2, antes da janela
 
-/** Cria um servidor e devolve um agente já logado. */
-async function entrarLogado() {
+interface OpcoesUsuario {
+  nome?: string;
+  email?: string;
+  cpf?: string;
+  perfil?: 'SERVIDOR' | 'ADMINISTRADOR';
+}
+
+/** Cria um usuário e devolve um agente já logado. */
+async function entrarLogado(opcoes: OpcoesUsuario = {}) {
   const usuario = await prisma.usuario.create({
     data: {
-      nome: 'Ana Servidora',
-      email: 'ana@gve.local',
-      cpf: '11144477735',
+      nome: opcoes.nome ?? 'Ana Servidora',
+      email: opcoes.email ?? 'ana@gve.local',
+      cpf: opcoes.cpf ?? '11144477735',
       senhaHash: await gerarHashSenha(SENHA),
-      perfil: 'SERVIDOR',
+      perfil: opcoes.perfil ?? 'SERVIDOR',
       trocaSenhaObrigatoria: false,
     },
   });
   const agente = request.agent(app);
-  await agente
-    .post('/api/v1/auth/login')
-    .send({ login: 'ana@gve.local', senha: SENHA })
-    .expect(200);
+  await agente.post('/api/v1/auth/login').send({ login: usuario.email, senha: SENHA }).expect(200);
   return { agente, usuario };
 }
 
@@ -168,5 +172,146 @@ describe('POST /reservas', () => {
     const status = respostas.map((r) => r.status).sort();
     expect(status).toEqual([201, 409]);
     expect(await prisma.reserva.count()).toBe(1);
+  });
+});
+
+describe('GET /reservas/minhas', () => {
+  it('devolve só as reservas do próprio usuário', async () => {
+    const { agente, usuario } = await entrarLogado();
+    const outro = await prisma.usuario.create({
+      data: {
+        nome: 'Outro',
+        email: 'outro@gve.local',
+        cpf: '39053344705',
+        senhaHash: 'x',
+      },
+    });
+    const veiculo = await criarVeiculo('AAA1A11');
+    await prisma.reserva.create({
+      data: {
+        veiculoId: veiculo.id,
+        usuarioId: usuario.id,
+        data: paraDataBanco(DATA1!),
+        turno: 'MATUTINO',
+        destino: 'Minha',
+      },
+    });
+    await prisma.reserva.create({
+      data: {
+        veiculoId: veiculo.id,
+        usuarioId: outro.id,
+        data: paraDataBanco(DATA2!),
+        turno: 'MATUTINO',
+        destino: 'Do outro',
+      },
+    });
+
+    const resposta = await agente.get('/api/v1/reservas/minhas');
+    expect(resposta.status).toBe(200);
+    expect(resposta.body.reservas).toHaveLength(1);
+    expect(resposta.body.reservas[0]).toMatchObject({
+      destino: 'Minha',
+      status: 'ATIVA',
+      veiculo: { placa: 'AAA1A11' },
+    });
+  });
+});
+
+describe('POST /reservas/:id/cancelar', () => {
+  async function criarReservaDe(usuarioId: number, data = DATA1!) {
+    const veiculo = await criarVeiculo('AAA1A11');
+    return prisma.reserva.create({
+      data: {
+        veiculoId: veiculo.id,
+        usuarioId,
+        data: paraDataBanco(data),
+        turno: 'MATUTINO',
+        destino: 'Escola X',
+      },
+    });
+  }
+
+  it('o autor cancela a própria reserva e o carro volta a aparecer livre', async () => {
+    const { agente, usuario } = await entrarLogado();
+    const reserva = await criarReservaDe(usuario.id);
+
+    const resposta = await agente.post(`/api/v1/reservas/${reserva.id}/cancelar`).send({});
+    expect(resposta.status).toBe(200);
+    expect(resposta.body.reserva.status).toBe('CANCELADA');
+
+    // Agora o mesmo veículo pode ser reservado de novo no mesmo turno (RN01).
+    const disp = await agente
+      .get('/api/v1/reservas/disponibilidade')
+      .query({ data: DATA1, turno: 'MATUTINO' });
+    const veiculo = disp.body.veiculos.find((v: { id: number }) => v.id === reserva.veiculoId);
+    expect(veiculo.ocupado).toBe(false);
+
+    const log = await prisma.logAuditoria.findFirst({ where: { acao: 'RESERVA_CANCELADA' } });
+    expect(log).toMatchObject({ usuarioId: usuario.id, entidade: 'reserva' });
+  });
+
+  it('o servidor não cancela a reserva de outro (403)', async () => {
+    const { agente } = await entrarLogado();
+    const outro = await prisma.usuario.create({
+      data: { nome: 'Outro', email: 'outro@gve.local', cpf: '39053344705', senhaHash: 'x' },
+    });
+    const reserva = await criarReservaDe(outro.id);
+
+    const resposta = await agente.post(`/api/v1/reservas/${reserva.id}/cancelar`).send({});
+    expect(resposta.status).toBe(403);
+    expect((await prisma.reserva.findUniqueOrThrow({ where: { id: reserva.id } })).status).toBe(
+      'ATIVA',
+    );
+  });
+
+  it('o administrador cancela a reserva de outro, com motivo obrigatório', async () => {
+    const { agente } = await entrarLogado({
+      email: 'admin@gve.local',
+      cpf: '52998224725',
+      perfil: 'ADMINISTRADOR',
+    });
+    const dono = await prisma.usuario.create({
+      data: { nome: 'Dono', email: 'dono@gve.local', cpf: '11144477735', senhaHash: 'x' },
+    });
+    const reserva = await criarReservaDe(dono.id);
+
+    // Sem motivo: recusa.
+    const semMotivo = await agente.post(`/api/v1/reservas/${reserva.id}/cancelar`).send({});
+    expect(semMotivo.status).toBe(400);
+    expect(semMotivo.body.erro.codigo).toBe('MOTIVO_OBRIGATORIO');
+
+    // Com motivo: aceita e registra o motivo na auditoria.
+    const comMotivo = await agente
+      .post(`/api/v1/reservas/${reserva.id}/cancelar`)
+      .send({ motivo: 'Veículo em manutenção' });
+    expect(comMotivo.status).toBe(200);
+    expect(comMotivo.body.reserva.status).toBe('CANCELADA');
+
+    const log = await prisma.logAuditoria.findFirst({ where: { acao: 'RESERVA_CANCELADA' } });
+    expect(log?.detalhes).toMatchObject({ motivo: 'Veículo em manutenção' });
+  });
+
+  it('não cancela reserva passada (RN05, 409)', async () => {
+    const { agente, usuario } = await entrarLogado();
+    const reserva = await criarReservaDe(usuario.id, somarDias(hojeEmSaoPaulo(), -1));
+
+    const resposta = await agente.post(`/api/v1/reservas/${reserva.id}/cancelar`).send({});
+    expect(resposta.status).toBe(409);
+    expect(resposta.body.erro.codigo).toBe('RESERVA_PASSADA');
+  });
+
+  it('não cancela duas vezes (409)', async () => {
+    const { agente, usuario } = await entrarLogado();
+    const reserva = await criarReservaDe(usuario.id);
+    await agente.post(`/api/v1/reservas/${reserva.id}/cancelar`).send({}).expect(200);
+    const resposta = await agente.post(`/api/v1/reservas/${reserva.id}/cancelar`).send({});
+    expect(resposta.status).toBe(409);
+    expect(resposta.body.erro.codigo).toBe('JA_CANCELADA');
+  });
+
+  it('reserva inexistente responde 404', async () => {
+    const { agente } = await entrarLogado();
+    const resposta = await agente.post('/api/v1/reservas/9999/cancelar').send({});
+    expect(resposta.status).toBe(404);
   });
 });

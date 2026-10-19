@@ -112,6 +112,7 @@ describe('troca de senha obrigatória', () => {
     const fetch = simularApi({
       'GET /auth/me': () => json(200, { usuario: { ...servidora, trocaSenhaObrigatoria: true } }),
       'PUT /auth/senha': () => json(200, { usuario: servidora }),
+      'GET /reservas/minhas': () => json(200, { reservas: [] }),
     });
     abrir('/');
     expect(await screen.findByRole('heading', { name: 'Crie sua senha' })).toBeTruthy();
@@ -122,9 +123,8 @@ describe('troca de senha obrigatória', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Salvar e continuar' }));
     expect(await screen.findByRole('heading', { name: 'Minhas reservas' })).toBeTruthy();
     expect(screen.getByText('Senha criada. Boas-vindas!')).toBeTruthy();
-    expect(JSON.parse(fetch.mock.calls.at(-1)![1]!.body as string)).toEqual({
-      novaSenha: 'nova-senha-456',
-    });
+    const chamada = fetch.mock.calls.find(([url, init]) => url === '/api/v1/auth/senha' && init);
+    expect(JSON.parse(chamada![1]!.body as string)).toEqual({ novaSenha: 'nova-senha-456' });
   });
 
   it('recusa confirmação diferente', async () => {

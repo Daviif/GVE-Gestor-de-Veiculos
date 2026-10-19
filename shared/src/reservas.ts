@@ -53,3 +53,22 @@ export interface Reserva {
   status: 'ATIVA' | 'CANCELADA';
   veiculo: { id: number; placa: string; modelo: string };
 }
+
+export const MOTIVO_CANCELAMENTO_MAX = 200;
+
+/**
+ * Cancelamento (RF11, RF12). O motivo é obrigatório quando um administrador cancela a
+ * reserva de outro usuário; o próprio autor cancela sem precisar explicar.
+ */
+export const cancelamentoSchema = z.object({
+  motivo: z
+    .string()
+    .trim()
+    .max(
+      MOTIVO_CANCELAMENTO_MAX,
+      `O motivo pode ter no máximo ${MOTIVO_CANCELAMENTO_MAX} caracteres.`,
+    )
+    .optional(),
+});
+
+export type CancelamentoEntrada = z.input<typeof cancelamentoSchema>;
