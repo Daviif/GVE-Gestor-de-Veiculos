@@ -604,6 +604,23 @@ p {
   color: var(--texto-apagado);
 }
 
+/* Assistente de nova reserva */
+
+.passos {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--texto-apagado);
+  flex-wrap: wrap;
+}
+
+.passos .ativo {
+  color: var(--azul);
+}
+
+.segmentado {
+  display: flex;
 /* Listas e formulários da administração */
 
 .form-grade {
@@ -619,6 +636,26 @@ p {
   flex-wrap: wrap;
 }
 
+.segmentado-opcao {
+  flex: 1;
+  min-width: 120px;
+  height: 46px;
+  border: 1px solid var(--borda-campo);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--texto-medio);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.segmentado-opcao.ativa {
+  border-color: var(--azul);
+  background: var(--azul-selecao);
+  color: var(--azul-escuro);
+}
+
+.lista-escolha {
 .campo-busca {
   width: 280px;
   max-width: 100%;
@@ -631,6 +668,64 @@ p {
   padding: 0;
   display: flex;
   flex-direction: column;
+  gap: 8px;
+}
+
+.escolha {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--borda-campo);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--texto);
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.escolha.ativa {
+  border-color: var(--azul);
+  background: var(--azul-selecao);
+}
+
+.escolha:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.escolha-ocupado {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--vermelho);
+  flex-shrink: 0;
+}
+
+.resumo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.resumo-linha {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 15px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--divisor);
+}
+
+.resumo-linha:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.resumo-rotulo {
+  color: var(--texto-suave);
   gap: 10px;
 }
 
