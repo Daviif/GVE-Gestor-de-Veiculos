@@ -143,6 +143,17 @@ describe('bloqueio após 5 tentativas em 15 min', () => {
     expect(resposta.body.erro.mensagem).toMatch(/Tente novamente em 15 min/);
   });
 
+  it('não deixa tentativas em paralelo passarem do limite', async () => {
+    await criarUsuario({});
+    const respostas = await Promise.all(
+      Array.from({ length: 10 }, () =>
+        request(app).post('/api/v1/auth/login').send({ login: 'ana@gve.local', senha: 'errada' }),
+      ),
+    );
+    const status = respostas.map((r) => r.status).sort();
+    expect(status).toEqual([401, 401, 401, 401, 401, 429, 429, 429, 429, 429]);
+  });
+
   it('libera quando as falhas saem da janela de 15 min', async () => {
     const usuario = await criarUsuario({});
     for (let i = 0; i < 5; i++) await entrar('ana@gve.local', 'errada');
