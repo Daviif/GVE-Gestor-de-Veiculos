@@ -7,6 +7,7 @@ import { EmConstrucao } from './paginas/EmConstrucao';
 import { Login } from './paginas/Login';
 import { MinhaConta } from './paginas/MinhaConta';
 import { MinhasReservas } from './paginas/MinhasReservas';
+import { NovaReserva } from './paginas/reservas/NovaReserva';
 import { TrocaSenha } from './paginas/TrocaSenha';
 import { ProvedorToast } from './toast/ProvedorToast';
 
@@ -20,7 +21,7 @@ export function Rotas() {
       <Route element={<RotaProtegida />}>
         <Route element={<Layout />}>
           <Route index element={<MinhasReservas />} />
-          <Route path="/reservas/nova" element={<EmConstrucao />} />
+          <Route path="/reservas/nova" element={<NovaReserva />} />
           <Route path="/agenda" element={<EmConstrucao />} />
           <Route path="/conta" element={<MinhaConta />} />
           <Route element={<RotaProtegida perfil="ADMINISTRADOR" />}>
