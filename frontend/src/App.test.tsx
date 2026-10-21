@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Rotas } from './App';
 import { ProvedorSessao } from './auth/sessao';
+import { anoAtual } from './datas';
 import { ProvedorToast } from './toast/ProvedorToast';
 
 const servidora: UsuarioSessao = {
@@ -207,11 +208,7 @@ describe('Minha conta', () => {
 
 describe('Feriados', () => {
   // Mesmo cálculo da tela: o ano corrente em São Paulo.
-  const ANO = Number(
-    new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric' }).format(
-      new Date(),
-    ),
-  );
+  const ANO = anoAtual();
   const admin = { ...servidora, perfil: 'ADMINISTRADOR' };
   const natal = {
     id: 1,
