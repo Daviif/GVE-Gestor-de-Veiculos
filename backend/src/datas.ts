@@ -1,6 +1,8 @@
 // Datas da reserva são locais (America/Sao_Paulo) e sem hora. A coluna é @db.Date;
 // no banco guardamos a meia-noite UTC do dia, e sempre trafegamos 'YYYY-MM-DD' na API.
 
+import type { Prisma } from './generated/prisma/client';
+
 /** RN02, RN03: a reserva é feita de 5 a 7 dias à frente. */
 export const ANTECEDENCIA_MIN = 5;
 export const ANTECEDENCIA_MAX = 7;
@@ -39,4 +41,15 @@ export function paraDataBanco(data: string): Date {
 /** Converte a coluna @db.Date de volta para 'YYYY-MM-DD'. */
 export function deDataBanco(data: Date): string {
   return data.toISOString().slice(0, 10);
+}
+
+/**
+ * Trava as datas ('YYYY-MM-DD') até o fim da transação. Reserva e cadastro de feriado passam
+ * por aqui: uma reserva nunca entra num dia que acabou de virar feriado, e o feriado sempre
+ * conta as reservas da data (RN11). Em ordem, para duas transações não se travarem em cruz.
+ */
+export async function travarDatas(tx: Prisma.TransactionClient, datas: string[]): Promise<void> {
+  for (const data of [...new Set(datas)].sort()) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`data:${data}`}))`;
+  }
 }
