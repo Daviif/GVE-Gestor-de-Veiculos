@@ -8,7 +8,7 @@ import {
 import { Router } from 'express';
 import { z } from 'zod';
 import { config } from '../config';
-import { deDataBanco, hojeEmSaoPaulo, paraDataBanco } from '../datas';
+import { deDataBanco, hojeEmSaoPaulo, paraDataBanco, travarDatas } from '../datas';
 import { prisma } from '../db';
 import { Prisma } from '../generated/prisma/client';
 import { autenticar, exigirPerfil } from '../middleware/autenticacao';
@@ -25,9 +25,12 @@ export const rotasFeriados = Router();
 rotasFeriados.use(autenticar(), exigirPerfil('ADMINISTRADOR'));
 
 /** Quantas reservas ativas cada data tem; o RN11 pede aviso ao cadastrar feriado nelas. */
-async function reservasAtivasPorData(datas: Date[]): Promise<Map<string, number>> {
+async function reservasAtivasPorData(
+  datas: Date[],
+  db: Prisma.TransactionClient,
+): Promise<Map<string, number>> {
   if (datas.length === 0) return new Map();
-  const grupos = await prisma.reserva.groupBy({
+  const grupos = await db.reserva.groupBy({
     by: ['data'],
     where: { data: { in: datas }, status: 'ATIVA' },
     _count: { _all: true },
@@ -38,8 +41,15 @@ async function reservasAtivasPorData(datas: Date[]): Promise<Map<string, number>
 const campos = { id: true, data: true, descricao: true, abrangencia: true } as const;
 type FeriadoBanco = Prisma.FeriadoGetPayload<{ select: typeof campos }>;
 
-async function paraResposta(feriados: FeriadoBanco[]): Promise<Feriado[]> {
-  const reservas = await reservasAtivasPorData(feriados.map((f) => f.data));
+/** Com `db` = a transação que travou as datas, a contagem de reservas não deixa nenhuma escapar. */
+async function paraResposta(
+  feriados: FeriadoBanco[],
+  db: Prisma.TransactionClient = prisma,
+): Promise<Feriado[]> {
+  const reservas = await reservasAtivasPorData(
+    feriados.map((f) => f.data),
+    db,
+  );
   return feriados.map((f) => {
     const data = deDataBanco(f.data);
     return { ...f, data, reservasAtivas: reservas.get(data) ?? 0 };
@@ -62,11 +72,13 @@ rotasFeriados.post('/', async (req, res) => {
   const data = paraDataBanco(entrada.data);
 
   try {
-    const criado = await prisma.$transaction(async (tx) => {
+    const feriado = await prisma.$transaction(async (tx) => {
+      // Espera reservas em andamento nesta data: elas entram na contagem do aviso (RN11).
+      await travarDatas(tx, [entrada.data]);
       if (await tx.feriado.findUnique({ where: { data }, select: { id: true } })) {
         throw new ErroApi(409, 'FERIADO_DUPLICADO', 'Já existe um feriado nessa data.');
       }
-      const feriado = await tx.feriado.create({
+      const criado = await tx.feriado.create({
         data: { ...entrada, data, criadoPorId: req.usuario!.id },
         select: campos,
       });
@@ -75,14 +87,14 @@ rotasFeriados.post('/', async (req, res) => {
           acao: 'FERIADO_CRIADO',
           usuarioId: req.usuario!.id,
           entidade: 'feriado',
-          entidadeId: feriado.id,
+          entidadeId: criado.id,
           detalhes: { data: entrada.data, descricao: entrada.descricao },
           ip: req.ip,
         },
       });
-      return feriado;
+      const [resposta] = await paraResposta([criado], tx);
+      return resposta;
     });
-    const [feriado] = await paraResposta([criado]);
     res.status(201).json({ feriado });
   } catch (erro) {
     // Dois cadastros simultâneos na mesma data: o índice único do banco decide.
@@ -147,8 +159,9 @@ rotasFeriados.post('/importar', async (req, res) => {
     if (data.startsWith(`${ano}-`) && !porData.has(data)) porData.set(data, name);
   }
 
-  const criados = await prisma.$transaction(async (tx) => {
-    const importados = await tx.feriado.createManyAndReturn({
+  const importados = await prisma.$transaction(async (tx) => {
+    await travarDatas(tx, [...porData.keys()]);
+    const criados = await tx.feriado.createManyAndReturn({
       data: [...porData].map(([data, descricao]) => ({
         data: paraDataBanco(data),
         descricao: descricao.slice(0, DESCRICAO_FERIADO_MAX),
@@ -165,17 +178,17 @@ rotasFeriados.post('/importar', async (req, res) => {
         entidade: 'feriado',
         detalhes: {
           ano,
-          importados: importados.length,
-          ignorados: porData.size - importados.length,
+          importados: criados.length,
+          ignorados: porData.size - criados.length,
         },
         ip: req.ip,
       },
     });
-    return importados.sort((x, y) => x.data.getTime() - y.data.getTime());
+    return paraResposta(
+      criados.sort((x, y) => x.data.getTime() - y.data.getTime()),
+      tx,
+    );
   });
 
-  res.json({
-    importados: await paraResposta(criados),
-    ignorados: porData.size - criados.length,
-  });
+  res.json({ importados, ignorados: porData.size - importados.length });
 });

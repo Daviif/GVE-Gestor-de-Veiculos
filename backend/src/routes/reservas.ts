@@ -13,6 +13,7 @@ import {
   hojeEmSaoPaulo,
   janelaDeDatas,
   paraDataBanco,
+  travarDatas,
 } from '../datas';
 import { prisma } from '../db';
 import { Prisma } from '../generated/prisma/client';
@@ -32,6 +33,10 @@ async function feriadosEntre(datas: string[]): Promise<Set<string>> {
   return new Set(feriados.map((f) => deDataBanco(f.data)));
 }
 
+function erroFeriado(): ErroApi {
+  return new ErroApi(422, 'DATA_FERIADO', 'Não há reservas em feriados. Escolha outra data.');
+}
+
 /** Recusa a data que está fora da janela (RN02, RN03) ou é feriado (RN11). */
 async function validarData(data: string): Promise<void> {
   if (!dentroDaJanela(data)) {
@@ -42,7 +47,7 @@ async function validarData(data: string): Promise<void> {
     );
   }
   if ((await feriadosEntre([data])).has(data)) {
-    throw new ErroApi(422, 'DATA_FERIADO', 'Não há reservas em feriados. Escolha outra data.');
+    throw erroFeriado();
   }
 }
 
@@ -90,6 +95,12 @@ rotasReservas.post('/', async (req, res) => {
 
   try {
     const reserva = await prisma.$transaction(async (tx) => {
+      // O validarData acima pode ter visto a data antes de ela virar feriado: confere de novo
+      // com a data travada, que o cadastro de feriado também trava (RN11).
+      await travarDatas(tx, [entrada.data]);
+      if (await tx.feriado.findUnique({ where: { data: paraDataBanco(entrada.data) } })) {
+        throw erroFeriado();
+      }
       const criada = await tx.reserva.create({
         data: {
           veiculoId: veiculo.id,

@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { criarApp } from '../src/app';
-import { janelaDeDatas, paraDataBanco } from '../src/datas';
+import { janelaDeDatas, paraDataBanco, travarDatas } from '../src/datas';
 import { prisma } from '../src/db';
 import { gerarHashSenha } from '../src/seguranca/senha';
 
@@ -173,6 +173,65 @@ describe('POST /feriados', () => {
       'Selecione a abrangência.',
     );
     expect(await prisma.feriado.count()).toBe(0);
+  });
+});
+
+describe('feriado e reserva na mesma data, ao mesmo tempo (RN11)', () => {
+  const espera = (ms: number) => new Promise((resolver) => setTimeout(resolver, ms));
+
+  it('reserva em andamento não entra num dia que acabou de virar feriado', async () => {
+    const { agente } = await entrarComo();
+    const veiculo = await prisma.veiculo.create({ data: { placa: 'ABC1D23', modelo: 'Carro' } });
+    let pedido!: Promise<request.Response>;
+    // Faz o papel do cadastro de feriado: trava a data, e a reserva fica na fila até o commit.
+    await prisma.$transaction(async (tx) => {
+      await travarDatas(tx, [DATA1!]);
+      pedido = agente
+        .post('/api/v1/reservas')
+        .send({ data: DATA1, turno: 'MATUTINO', veiculoId: veiculo.id, destino: 'Escola A' })
+        .then((r) => r);
+      await espera(300);
+      await tx.feriado.create({
+        data: {
+          data: paraDataBanco(DATA1!),
+          descricao: 'Ponto facultativo',
+          abrangencia: 'MUNICIPAL',
+        },
+      });
+    });
+
+    const resposta = await pedido;
+    expect(resposta.status).toBe(422);
+    expect(resposta.body.erro.codigo).toBe('DATA_FERIADO');
+    expect(await prisma.reserva.count()).toBe(0);
+  });
+
+  it('feriado cadastrado durante uma reserva conta essa reserva no aviso', async () => {
+    const { agente, usuario } = await entrarComo();
+    const veiculo = await prisma.veiculo.create({ data: { placa: 'ABC1D23', modelo: 'Carro' } });
+    let pedido!: Promise<request.Response>;
+    // Faz o papel da reserva: trava a data, e o cadastro do feriado fica na fila até o commit.
+    await prisma.$transaction(async (tx) => {
+      await travarDatas(tx, [DATA1!]);
+      pedido = agente
+        .post('/api/v1/feriados')
+        .send({ data: DATA1, descricao: 'Ponto facultativo', abrangencia: 'MUNICIPAL' })
+        .then((r) => r);
+      await espera(300);
+      await tx.reserva.create({
+        data: {
+          veiculoId: veiculo.id,
+          usuarioId: usuario.id,
+          data: paraDataBanco(DATA1!),
+          turno: 'MATUTINO',
+          destino: 'Escola A',
+        },
+      });
+    });
+
+    const resposta = await pedido;
+    expect(resposta.status).toBe(201);
+    expect(resposta.body.feriado.reservasAtivas).toBe(1);
   });
 });
 
