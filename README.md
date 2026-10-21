@@ -64,7 +64,7 @@ npm run dev              # backend em :3333 e frontend em :5173
 | Comando | O que faz |
 | --- | --- |
 | `npm run dev` | Backend e frontend com recarga automática |
-| `npm test` | Testes de todos os pacotes (Vitest) |
+| `npm test` | Testes de todos os pacotes (Vitest). Os do backend usam o banco `gve_teste`, criado no mesmo PostgreSQL: rode `npm run db:up` antes |
 | `npm run typecheck` | Verificação de tipos |
 | `npm run lint` | ESLint |
 | `npm run format` | Formata o código com Prettier |
