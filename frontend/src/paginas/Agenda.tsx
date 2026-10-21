@@ -61,8 +61,8 @@ function Celula({ reservas }: PropsCelula) {
               {r.veiculo.modelo} · {r.veiculo.placa}
             </div>
             <div className="agenda-reserva-dados">
-              <span>{r.usuario.nome}</span>
-              <span>·</span>
+              {/* O "·" fica preso ao nome (espaço não separável): sozinho, quebrava numa linha própria. */}
+              <span>{r.usuario.nome}&nbsp;·</span>
               <span>{r.destino}</span>
             </div>
           </li>

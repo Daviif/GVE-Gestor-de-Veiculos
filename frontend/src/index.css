@@ -307,6 +307,8 @@ p {
   display: flex;
   align-items: center;
   gap: 18px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .topo-logo {
@@ -337,10 +339,16 @@ p {
   align-items: center;
   gap: 14px;
   font-size: 14px;
+  min-width: 0;
 }
 
+/* Nome longo vira "…" em vez de espremer a marca; o completo fica no title e em Minha conta. */
 .topo-nome {
   font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .topo-celular {
