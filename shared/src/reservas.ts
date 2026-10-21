@@ -72,3 +72,21 @@ export const cancelamentoSchema = z.object({
 });
 
 export type CancelamentoEntrada = z.input<typeof cancelamentoSchema>;
+
+/** RF13: a agenda devolve no máximo 31 dias (uma janela que cabe no mês). */
+export const AGENDA_JANELA_MAX_DIAS = 31;
+
+export const agendaQuerySchema = z.object({
+  inicio: dataSchema,
+  fim: dataSchema,
+});
+
+/** Item da agenda da frota: uma reserva ativa com o nome de quem reservou. */
+export interface ReservaAgenda {
+  id: number;
+  data: string;
+  turno: Turno;
+  destino: string;
+  veiculo: { id: number; placa: string; modelo: string };
+  usuario: { id: number; nome: string };
+}
