@@ -3,9 +3,11 @@ import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { criarApp } from '../src/app';
 import { prisma } from '../src/db';
+import { falhasPorIp, MAX_FALHAS_POR_IP } from '../src/routes/auth';
 import { autenticar, exigirPerfil } from '../src/middleware/autenticacao';
 import { tratarErros } from '../src/middleware/erros';
 import { gerarHashSenha } from '../src/seguranca/senha';
+import { travarConta } from '../src/seguranca/sessao';
 
 const app = criarApp();
 
@@ -55,6 +57,7 @@ function cookieSessao(resposta: request.Response): string {
 }
 
 beforeEach(async () => {
+  await falhasPorIp.resetAll();
   await prisma.sessao.deleteMany();
   await prisma.logAuditoria.deleteMany();
   await prisma.reserva.deleteMany();
@@ -131,6 +134,13 @@ describe('POST /auth/login', () => {
     expect(resposta.status).toBe(400);
     expect(resposta.body.erro.mensagem).toBe('Informe o e-mail ou o CPF.');
   });
+
+  it('recusa login gigante sem gravá-lo no log de auditoria', async () => {
+    const { resposta } = await entrar(`${'a'.repeat(90_000)}@gve.local`, 'errada');
+    expect(resposta.status).toBe(400);
+    expect(resposta.body.erro.mensagem).toBe('E-mail ou CPF longo demais.');
+    expect(await prisma.logAuditoria.count()).toBe(0);
+  });
 });
 
 describe('bloqueio após 5 tentativas em 15 min', () => {
@@ -156,6 +166,26 @@ describe('bloqueio após 5 tentativas em 15 min', () => {
     expect(status).toEqual([401, 401, 401, 401, 401, 429, 429, 429, 429, 429]);
   });
 
+  it('login com a senha antiga não sobrevive a uma redefinição em andamento', async () => {
+    const usuario = await criarUsuario({});
+    let tentativa!: Promise<{ resposta: request.Response }>;
+    // Faz o papel da redefinição: trava a conta, e o login fica na fila até o commit.
+    await prisma.$transaction(async (tx) => {
+      await travarConta(tx, usuario.id);
+      tentativa = entrar('ana@gve.local', SENHA);
+      await new Promise((resolver) => setTimeout(resolver, 300));
+      await tx.usuario.update({
+        where: { id: usuario.id },
+        data: { senhaHash: await gerarHashSenha('senha-nova-456'), trocaSenhaObrigatoria: true },
+      });
+      await tx.sessao.deleteMany({ where: { usuarioId: usuario.id } });
+    });
+
+    const { resposta } = await tentativa;
+    expect(resposta.status).toBe(401);
+    expect(await prisma.sessao.count({ where: { usuarioId: usuario.id } })).toBe(0);
+  });
+
   it('libera quando as falhas saem da janela de 15 min', async () => {
     const usuario = await criarUsuario({});
     for (let i = 0; i < 5; i++) await entrar('ana@gve.local', 'errada');
@@ -179,6 +209,30 @@ describe('bloqueio após 5 tentativas em 15 min', () => {
     for (let i = 0; i < 5; i++) await entrar('ninguem@gve.local', 'x');
     expect((await entrar('ninguem@gve.local', 'x')).resposta.status).toBe(429);
     expect((await entrar()).resposta.status).toBe(200);
+  });
+});
+
+describe('limite de falhas por IP', () => {
+  it('barra o IP depois de 20 falhas, mesmo espalhadas por contas diferentes', async () => {
+    await criarUsuario({});
+    for (let i = 0; i < MAX_FALHAS_POR_IP; i++) {
+      const { resposta } = await entrar(`ninguem${i}@gve.local`, 'errada');
+      expect(resposta.status).toBe(401);
+    }
+
+    // Nem a senha certa passa enquanto o IP está barrado.
+    const { resposta } = await entrar('ana@gve.local', SENHA);
+    expect(resposta.status).toBe(429);
+    expect(resposta.body.erro.codigo).toBe('MUITAS_TENTATIVAS');
+    expect(resposta.headers['retry-after']).toBeDefined();
+  });
+
+  it('logins certos não contam, para não barrar quem divide o mesmo IP', async () => {
+    await criarUsuario({});
+    for (let i = 0; i < MAX_FALHAS_POR_IP + 5; i++) {
+      const { resposta } = await entrar();
+      expect(resposta.status).toBe(200);
+    }
   });
 });
 

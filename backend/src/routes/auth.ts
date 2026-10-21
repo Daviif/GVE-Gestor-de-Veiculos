@@ -1,5 +1,6 @@
 import { loginSchema, normalizarLogin, trocaSenhaSchema, type UsuarioSessao } from '@gve/shared';
 import { Router } from 'express';
+import { MemoryStore, rateLimit } from 'express-rate-limit';
 import { registrarAuditoria } from '../auditoria';
 import { prisma } from '../db';
 import type { Prisma, Usuario } from '../generated/prisma/client';
@@ -12,11 +13,42 @@ import {
   encerrarSessao,
   gravarCookieSessao,
   lerTokenSessao,
+  travarConta,
 } from '../seguranca/sessao';
 
 /** Bloqueio após 5 tentativas erradas em 15 min, por conta (ou pelo login digitado, se não existe). */
 export const MAX_TENTATIVAS = 5;
 export const JANELA_TENTATIVAS_MS = 15 * 60 * 1000;
+
+/**
+ * Falhas de login aceitas por IP a cada minuto, somando todas as contas. O bloqueio por conta
+ * não segura quem tenta uma conta diferente a cada vez, e cada tentativa custa um Argon2
+ * (19 MiB e CPU): sem isso, uma rajada derruba a VPS. Logins certos não contam, para não
+ * barrar uma secretaria inteira que sai pelo mesmo IP.
+ */
+export const MAX_FALHAS_POR_IP = 20;
+export const JANELA_FALHAS_POR_IP_MS = 60 * 1000;
+
+/** Em memória: basta para uma instância só da API. Exportado para os testes zerarem. */
+export const falhasPorIp = new MemoryStore();
+
+const limitarFalhasPorIp = rateLimit({
+  windowMs: JANELA_FALHAS_POR_IP_MS,
+  limit: MAX_FALHAS_POR_IP,
+  skipSuccessfulRequests: true,
+  store: falhasPorIp,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  handler: (_req, _res, next) => {
+    next(
+      new ErroApi(
+        429,
+        'MUITAS_TENTATIVAS',
+        'Muitas tentativas de login sem sucesso a partir desta rede. Aguarde 1 minuto.',
+      ),
+    );
+  },
+});
 
 const CREDENCIAIS_INVALIDAS = 'E-mail/CPF ou senha incorretos.';
 
@@ -75,24 +107,29 @@ async function bloqueadoAte(
   return new Date(quintaFalha.criadoEm.getTime() + JANELA_TENTATIVAS_MS);
 }
 
-rotasAuth.post('/login', async (req, res) => {
+rotasAuth.post('/login', limitarFalhasPorIp, async (req, res) => {
   const entrada = loginSchema.parse(req.body);
   const login = normalizarLogin(entrada.login);
   const agora = Date.now();
 
-  const usuario = login.valor
+  const encontrado = login.valor
     ? await prisma.usuario.findUnique({
         where: login.tipo === 'email' ? { email: login.valor } : { cpf: login.valor },
+        select: { id: true },
       })
     : null;
 
   // Tentativas na mesma conta (ou no mesmo login inexistente) passam uma de cada vez:
-  // conferir o bloqueio, testar a senha e gravar a falha é atômico. Sem isso, várias
-  // tentativas em paralelo veriam a contagem antiga e passariam do limite.
-  const chave = usuario ? `usuario:${usuario.id}` : `login:${login.valor}`;
-  const erro = await prisma.$transaction(
+  // conferir o bloqueio, testar a senha e gravar a falha ou abrir a sessão é atômico.
+  // Sem isso, várias tentativas em paralelo veriam a contagem antiga e passariam do limite.
+  const resultado = await prisma.$transaction(
     async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${chave}))`;
+      await travarConta(tx, encontrado?.id ?? login.valor);
+      // Relido com a conta travada: uma redefinição de senha ou desativação que terminou
+      // enquanto esta tentativa esperava já vale aqui.
+      const usuario = encontrado
+        ? await tx.usuario.findUnique({ where: { id: encontrado.id } })
+        : null;
 
       const falha = async (motivo: string, erroApi: ErroApi) => {
         await tx.logAuditoria.create({
@@ -103,7 +140,7 @@ rotasAuth.post('/login', async (req, res) => {
             ip: req.ip,
           },
         });
-        return erroApi;
+        return { erro: erroApi };
       };
 
       const liberaEm = await bloqueadoAte(tx, usuario, login.valor, agora);
@@ -149,17 +186,17 @@ rotasAuth.post('/login', async (req, res) => {
 
       // Gravado ainda com o lock: zera a contagem antes da próxima tentativa.
       await tx.logAuditoria.create({ data: { acao: 'LOGIN', usuarioId: usuario.id, ip: req.ip } });
-      return null;
+      // Também com o lock: uma redefinição de senha na fila encerra esta sessão junto com as outras.
+      return { usuario, token: await abrirSessao(usuario.id, tx) };
     },
     // Tentativas na fila esperam o lock dentro da transação; o padrão de 5 s é curto para isso.
     { maxWait: 10_000, timeout: 30_000 },
   );
   // O erro sai depois do commit, para a falha ficar gravada.
-  if (erro) throw erro;
+  if ('erro' in resultado) throw resultado.erro;
 
-  const token = await abrirSessao(usuario!.id);
-  gravarCookieSessao(res, token);
-  res.json({ usuario: paraSessao(usuario!) });
+  gravarCookieSessao(res, resultado.token);
+  res.json({ usuario: paraSessao(resultado.usuario) });
 });
 
 /** Funciona mesmo com a sessão vencida: o objetivo é só apagar o cookie. */
@@ -192,16 +229,19 @@ rotasAuth.put('/senha', autenticar({ permitirTrocaPendente: true }), async (req,
     throw new ErroApi(400, 'ENTRADA_INVALIDA', 'Informe a senha atual.');
   }
 
-  const [atualizado] = await prisma.$transaction([
-    prisma.usuario.update({
+  const senhaHash = await gerarHashSenha(entrada.novaSenha);
+  const atualizado = await prisma.$transaction(async (tx) => {
+    await travarConta(tx, usuario.id);
+    const salvo = await tx.usuario.update({
       where: { id: usuario.id },
-      data: { senhaHash: await gerarHashSenha(entrada.novaSenha), trocaSenhaObrigatoria: false },
-    }),
+      data: { senhaHash, trocaSenhaObrigatoria: false },
+    });
     // Encerra as outras sessões abertas com a senha antiga.
-    prisma.sessao.deleteMany({ where: { usuarioId: usuario.id, id: { not: req.sessaoId } } }),
-    prisma.logAuditoria.create({
+    await tx.sessao.deleteMany({ where: { usuarioId: usuario.id, id: { not: req.sessaoId } } });
+    await tx.logAuditoria.create({
       data: { acao: 'SENHA_ALTERADA', usuarioId: usuario.id, ip: req.ip },
-    }),
-  ]);
+    });
+    return salvo;
+  });
   res.json({ usuario: paraSessao(atualizado) });
 });

@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { CookieOptions, Request, Response } from 'express';
 import { config } from '../config';
 import { prisma } from '../db';
+import type { Prisma } from '../generated/prisma/client';
 
 /** RNF11: a sessão vence após 30 min sem uso. */
 export const SESSAO_DURACAO_MS = 30 * 60 * 1000;
@@ -39,12 +40,28 @@ export function apagarCookieSessao(res: Response): void {
   res.clearCookie(COOKIE_SESSAO, opcoesCookie);
 }
 
+/**
+ * Trava a conta (ou o login digitado, se não existe) até o fim da transação. Login, troca e
+ * redefinição de senha e desativação passam por aqui, então um login nunca confere uma senha
+ * que está sendo trocada nem abre sessão depois que as sessões da conta foram encerradas.
+ */
+export async function travarConta(
+  tx: Prisma.TransactionClient,
+  conta: number | string,
+): Promise<void> {
+  const chave = typeof conta === 'number' ? `usuario:${conta}` : `login:${conta}`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${chave}))`;
+}
+
 /** Abre uma sessão e devolve o token que vai no cookie. Aproveita para limpar as vencidas. */
-export async function abrirSessao(usuarioId: number): Promise<string> {
+export async function abrirSessao(
+  usuarioId: number,
+  db: Prisma.TransactionClient = prisma,
+): Promise<string> {
   const token = randomBytes(32).toString('base64url');
   const agora = Date.now();
-  await prisma.sessao.deleteMany({ where: { expiraEm: { lt: new Date(agora) } } });
-  await prisma.sessao.create({
+  await db.sessao.deleteMany({ where: { expiraEm: { lt: new Date(agora) } } });
+  await db.sessao.create({
     data: { id: hashToken(token), usuarioId, expiraEm: new Date(agora + SESSAO_DURACAO_MS) },
   });
   return token;
