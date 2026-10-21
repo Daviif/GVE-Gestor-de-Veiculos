@@ -107,6 +107,27 @@ p {
   box-shadow: 0 0 0 3px var(--foco);
 }
 
+/* Campo com erro ao lado: rótulo e campo, e a mensagem logo abaixo. */
+.campo-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.campo[aria-invalid='true'] {
+  border-color: var(--vermelho);
+}
+
+.campo[aria-invalid='true']:focus {
+  box-shadow: 0 0 0 3px var(--vermelho-fundo);
+}
+
+.erro-campo {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vermelho);
+}
+
 .botao {
   height: 48px;
   padding: 0 22px;
@@ -948,6 +969,7 @@ p {
 
 .form-linha {
   display: flex;
+  align-items: flex-start;
   gap: 10px;
   flex-wrap: wrap;
 }
