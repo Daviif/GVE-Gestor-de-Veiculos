@@ -621,6 +621,10 @@ p {
 
 .segmentado {
   display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* Listas e formulários da administração */
 
 .form-grade {
@@ -656,6 +660,14 @@ p {
 }
 
 .lista-escolha {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .campo-busca {
   width: 280px;
   max-width: 100%;
@@ -668,7 +680,7 @@ p {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .escolha {
@@ -726,7 +738,6 @@ p {
 
 .resumo-rotulo {
   color: var(--texto-suave);
-  gap: 10px;
 }
 
 .item-lista {
