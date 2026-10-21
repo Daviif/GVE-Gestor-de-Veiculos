@@ -1,15 +1,23 @@
 import { z } from 'zod';
-
-/** Login por e-mail ou CPF (RF01). Validado igual no formulário e na API. */
-export const loginSchema = z.object({
-  login: z.string().trim().min(1, 'Informe o e-mail ou o CPF.'),
-  senha: z.string().min(1, 'Informe a senha.'),
-});
-
-export type LoginEntrada = z.infer<typeof loginSchema>;
+import { EMAIL_MAX } from './usuarios';
 
 export const SENHA_MIN = 8;
 export const SENHA_MAX = 128;
+
+/**
+ * Login por e-mail ou CPF (RF01). Validado igual no formulário e na API. Os máximos são os
+ * do cadastro: nada maior existe, e o login digitado vai para o log quando a conta não existe.
+ */
+export const loginSchema = z.object({
+  login: z
+    .string()
+    .trim()
+    .min(1, 'Informe o e-mail ou o CPF.')
+    .max(EMAIL_MAX, 'E-mail ou CPF longo demais.'),
+  senha: z.string().min(1, 'Informe a senha.').max(SENHA_MAX, 'Senha longa demais.'),
+});
+
+export type LoginEntrada = z.infer<typeof loginSchema>;
 
 /**
  * Troca da própria senha (RF14). A senha atual é dispensada só na troca obrigatória do

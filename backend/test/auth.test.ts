@@ -133,6 +133,13 @@ describe('POST /auth/login', () => {
     expect(resposta.status).toBe(400);
     expect(resposta.body.erro.mensagem).toBe('Informe o e-mail ou o CPF.');
   });
+
+  it('recusa login gigante sem gravá-lo no log de auditoria', async () => {
+    const { resposta } = await entrar(`${'a'.repeat(90_000)}@gve.local`, 'errada');
+    expect(resposta.status).toBe(400);
+    expect(resposta.body.erro.mensagem).toBe('E-mail ou CPF longo demais.');
+    expect(await prisma.logAuditoria.count()).toBe(0);
+  });
 });
 
 describe('bloqueio após 5 tentativas em 15 min', () => {
