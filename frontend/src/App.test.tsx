@@ -288,6 +288,27 @@ describe('Feriados', () => {
     expect(fetch).not.toHaveBeenCalledWith('/api/v1/feriados', expect.anything());
   });
 
+  it('importação que termina depois da troca de ano não mistura as listas', async () => {
+    let responderImportacao!: (resposta: Response) => void;
+    simularApi({
+      'GET /auth/me': () => json(200, { usuario: admin }),
+      [`GET /feriados?ano=${ANO}`]: () => json(200, { feriados: [] }),
+      [`GET /feriados?ano=${ANO + 1}`]: () => json(200, { feriados: [] }),
+      'POST /feriados/importar': () => new Promise((resolver) => (responderImportacao = resolver)),
+    });
+    abrir('/admin/feriados');
+    await screen.findByText(/Nenhum feriado cadastrado/);
+
+    // Importa o ano atual e, antes da resposta, vai para o próximo ano.
+    fireEvent.click(screen.getByRole('button', { name: 'Importar feriados nacionais' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo ano' }));
+    await screen.findByText(`Nenhum feriado cadastrado em ${ANO + 1}.`, { exact: false });
+
+    responderImportacao(new Response(JSON.stringify({ importados: [natal], ignorados: 0 })));
+    expect(await screen.findByText(`1 feriado nacional importado em ${ANO}.`)).toBeTruthy();
+    expect(screen.queryByRole('listitem', { name: /Natal/ })).toBeNull();
+  });
+
   it('importa os feriados nacionais do ano exibido', async () => {
     const fetch = simularApi({
       'GET /auth/me': () => json(200, { usuario: admin }),

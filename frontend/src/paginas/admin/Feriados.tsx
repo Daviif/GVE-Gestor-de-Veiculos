@@ -165,14 +165,20 @@ export function Feriados() {
   const feriados = carregado?.ano === ano ? carregado.feriados : undefined;
   const erroDoAno = erroCarga?.ano === ano ? erroCarga.mensagem : null;
 
-  function atualizar(mudar: (lista: Feriado[]) => Feriado[]) {
-    setCarregado((atual) => atual && { ...atual, feriados: mudar(atual.feriados) });
+  /** Muda a lista carregada; `anoDaLista` é o dela agora, não o de quando a ação começou. */
+  function atualizar(mudar: (lista: Feriado[], anoDaLista: number) => Feriado[]) {
+    setCarregado((atual) => atual && { ...atual, feriados: mudar(atual.feriados, atual.ano) });
   }
 
-  /** Junta os novos à lista, se forem do ano exibido. */
+  /**
+   * Junta os novos à lista, se forem do ano dela. Compara com o ano da lista na hora da resposta:
+   * o administrador pode ter trocado de ano enquanto a importação ou o cadastro estava em curso.
+   */
   function incluir(novos: Feriado[]) {
-    const doAno = novos.filter((f) => f.data.startsWith(`${ano}-`));
-    if (doAno.length > 0) atualizar((lista) => [...lista, ...doAno].sort(porData));
+    atualizar((lista, anoDaLista) => {
+      const doAno = novos.filter((f) => f.data.startsWith(`${anoDaLista}-`));
+      return doAno.length === 0 ? lista : [...lista, ...doAno].sort(porData);
+    });
   }
 
   async function importar() {
