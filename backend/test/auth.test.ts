@@ -57,6 +57,8 @@ function cookieSessao(resposta: request.Response): string {
 beforeEach(async () => {
   await prisma.sessao.deleteMany();
   await prisma.logAuditoria.deleteMany();
+  await prisma.reserva.deleteMany();
+  await prisma.feriado.deleteMany();
   await prisma.usuario.deleteMany();
 });
 
