@@ -4,6 +4,7 @@ import { RotaProtegida } from './auth/RotaProtegida';
 import { ProvedorSessao } from './auth/sessao';
 import { Layout } from './componentes/Layout';
 import { itensAdmin } from './componentes/navegacao';
+import { Agenda } from './paginas/Agenda';
 import { Usuarios } from './paginas/admin/Usuarios';
 import { EmConstrucao } from './paginas/EmConstrucao';
 import { Login } from './paginas/Login';
@@ -29,7 +30,7 @@ export function Rotas() {
         <Route element={<Layout />}>
           <Route index element={<MinhasReservas />} />
           <Route path="/reservas/nova" element={<NovaReserva />} />
-          <Route path="/agenda" element={<EmConstrucao />} />
+          <Route path="/agenda" element={<Agenda />} />
           <Route path="/conta" element={<MinhaConta />} />
           <Route element={<RotaProtegida perfil="ADMINISTRADOR" />}>
             {itensAdmin.map((item) => (

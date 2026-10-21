@@ -808,6 +808,132 @@ p {
   color: var(--texto-suave);
 }
 
+/* Agenda da frota */
+
+.agenda-grade {
+  display: grid;
+  grid-template-columns: 110px repeat(7, 1fr);
+  gap: 1px;
+  background: var(--borda);
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.agenda-cabecalho {
+  background: #fff;
+  padding: 10px 8px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--texto-medio);
+}
+
+.agenda-cabecalho.hoje {
+  background: var(--azul-selecao);
+  color: var(--azul-escuro);
+}
+
+.agenda-cabecalho-dia {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 11px;
+}
+
+.agenda-cabecalho-data {
+  margin-top: 2px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--texto);
+}
+
+.agenda-rotulo-turno {
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--texto-medio);
+}
+
+.agenda-celula {
+  background: #fff;
+  min-height: 90px;
+  padding: 8px;
+}
+
+.agenda-celula.vazia {
+  background: var(--fundo);
+}
+
+.agenda-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agenda-reserva {
+  background: var(--azul-selecao);
+  border-left: 3px solid var(--azul);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.agenda-reserva-veiculo {
+  font-weight: 700;
+  color: var(--azul-escuro);
+}
+
+.agenda-reserva-dados {
+  margin-top: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  color: var(--texto-medio);
+}
+
+.agenda-lista-dias {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.agenda-dia-cartao {
+  background: #fff;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 14px 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agenda-dia-titulo {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--texto);
+  margin: 0;
+}
+
+.agenda-dia-titulo.hoje {
+  color: var(--azul-escuro);
+}
+
+.agenda-dia-turno {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .item-lista {
   display: flex;
   align-items: center;
