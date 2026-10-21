@@ -7,6 +7,7 @@ import { Prisma } from '../generated/prisma/client';
 import { autenticar, exigirPerfil } from '../middleware/autenticacao';
 import { ErroApi } from '../middleware/erros';
 import { gerarHashSenha } from '../seguranca/senha';
+import { travarConta } from '../seguranca/sessao';
 
 // Sem a senha nem o hash: nunca sai da API.
 const campos = {
@@ -157,6 +158,8 @@ rotasUsuarios.patch('/:id/situacao', async (req, res) => {
   }
 
   const usuario = await prisma.$transaction(async (tx) => {
+    // Espera um login em andamento terminar, para a sessão que ele abrir também cair.
+    await travarConta(tx, atual.id);
     const atualizado = await tx.usuario.update({
       where: { id: atual.id },
       data: { ativo },
@@ -182,11 +185,14 @@ rotasUsuarios.patch('/:id/situacao', async (req, res) => {
 rotasUsuarios.post('/:id/redefinir-senha', async (req, res) => {
   const usuario = await buscarUsuario(req.params.id);
   const senhaProvisoria = gerarSenhaProvisoria();
+  const senhaHash = await gerarHashSenha(senhaProvisoria);
 
   await prisma.$transaction(async (tx) => {
+    // Espera um login em andamento terminar, para a sessão que ele abrir também cair.
+    await travarConta(tx, usuario.id);
     await tx.usuario.update({
       where: { id: usuario.id },
-      data: { senhaHash: await gerarHashSenha(senhaProvisoria), trocaSenhaObrigatoria: true },
+      data: { senhaHash, trocaSenhaObrigatoria: true },
     });
     // A senha antiga não vale mais: encerra as sessões abertas.
     await tx.sessao.deleteMany({ where: { usuarioId: usuario.id } });

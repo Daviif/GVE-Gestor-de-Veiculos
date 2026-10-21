@@ -6,6 +6,7 @@ import { prisma } from '../src/db';
 import { autenticar, exigirPerfil } from '../src/middleware/autenticacao';
 import { tratarErros } from '../src/middleware/erros';
 import { gerarHashSenha } from '../src/seguranca/senha';
+import { travarConta } from '../src/seguranca/sessao';
 
 const app = criarApp();
 
@@ -57,6 +58,7 @@ function cookieSessao(resposta: request.Response): string {
 beforeEach(async () => {
   await prisma.sessao.deleteMany();
   await prisma.logAuditoria.deleteMany();
+  await prisma.reserva.deleteMany();
   await prisma.usuario.deleteMany();
 });
 
@@ -152,6 +154,26 @@ describe('bloqueio após 5 tentativas em 15 min', () => {
     );
     const status = respostas.map((r) => r.status).sort();
     expect(status).toEqual([401, 401, 401, 401, 401, 429, 429, 429, 429, 429]);
+  });
+
+  it('login com a senha antiga não sobrevive a uma redefinição em andamento', async () => {
+    const usuario = await criarUsuario({});
+    let tentativa!: Promise<{ resposta: request.Response }>;
+    // Faz o papel da redefinição: trava a conta, e o login fica na fila até o commit.
+    await prisma.$transaction(async (tx) => {
+      await travarConta(tx, usuario.id);
+      tentativa = entrar('ana@gve.local', SENHA);
+      await new Promise((resolver) => setTimeout(resolver, 300));
+      await tx.usuario.update({
+        where: { id: usuario.id },
+        data: { senhaHash: await gerarHashSenha('senha-nova-456'), trocaSenhaObrigatoria: true },
+      });
+      await tx.sessao.deleteMany({ where: { usuarioId: usuario.id } });
+    });
+
+    const { resposta } = await tentativa;
+    expect(resposta.status).toBe(401);
+    expect(await prisma.sessao.count({ where: { usuarioId: usuario.id } })).toBe(0);
   });
 
   it('libera quando as falhas saem da janela de 15 min', async () => {
