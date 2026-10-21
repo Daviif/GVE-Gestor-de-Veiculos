@@ -1,48 +1,14 @@
 import { ROTULO_TURNO, TURNOS, type ReservaAgenda, type Turno } from '@gve/shared';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { api, ErroApi } from '../api';
+import { dataLonga, diaMes, hojeEmSaoPaulo, inicioDaSemana, somarDias } from '../datas';
 
 function mensagemDe(erro: unknown): string {
   return erro instanceof ErroApi ? erro.message : 'Erro inesperado. Tente novamente.';
 }
 
-/** 'YYYY-MM-DD' do dia atual em São Paulo. */
-function hojeEmSaoPaulo(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-}
-
-/** 'YYYY-MM-DD' deslocado em `dias` (positivos ou negativos), sem fuso. */
-function somarDias(data: string, dias: number): string {
-  const d = new Date(`${data}T00:00:00.000Z`);
-  d.setUTCDate(d.getUTCDate() + dias);
-  return d.toISOString().slice(0, 10);
-}
-
-/** Segunda-feira que começa a semana da data informada (segunda = 0 … domingo = 6). */
-function inicioDaSemana(data: string): string {
-  const d = new Date(`${data}T00:00:00.000Z`);
-  const diaSemana = (d.getUTCDay() + 6) % 7; // dom=0 → 6, seg=1 → 0, …
-  return somarDias(data, -diaSemana);
-}
-
 const DIAS_SEMANA_CURTOS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 const DIAS_SEMANA_LONGOS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
-
-/** 'YYYY-MM-DD' → '14/10'. */
-function diaMes(data: string): string {
-  return `${data.slice(8, 10)}/${data.slice(5, 7)}`;
-}
-
-/** 'YYYY-MM-DD' → '14 de outubro de 2026'. */
-function dataLonga(data: string): string {
-  const d = new Date(`${data}T00:00:00.000Z`);
-  return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(d);
-}
 
 interface PropsCelula {
   reservas: ReservaAgenda[];
@@ -61,8 +27,8 @@ function Celula({ reservas }: PropsCelula) {
               {r.veiculo.modelo} · {r.veiculo.placa}
             </div>
             <div className="agenda-reserva-dados">
-              <span>{r.usuario.nome}</span>
-              <span>·</span>
+              {/* O "·" fica preso ao nome (espaço não separável): sozinho, quebrava numa linha própria. */}
+              <span>{r.usuario.nome}&nbsp;·</span>
               <span>{r.destino}</span>
             </div>
           </li>

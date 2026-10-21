@@ -10,20 +10,10 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { api, ErroApi } from '../../api';
 import { useToast } from '../../toast/contexto';
+import { diaComSemana } from '../../datas';
 
 function mensagemDe(erro: unknown): string {
   return erro instanceof ErroApi ? erro.message : 'Erro inesperado. Tente novamente.';
-}
-
-/** 'YYYY-MM-DD' → 'seg, 20/10'. A data é só dia, então formata em UTC para não deslocar. */
-function formatarData(data: string): string {
-  const d = new Date(`${data}T00:00:00.000Z`);
-  return new Intl.DateTimeFormat('pt-BR', {
-    weekday: 'short',
-    day: '2-digit',
-    month: '2-digit',
-    timeZone: 'UTC',
-  }).format(d);
 }
 
 export function NovaReserva() {
@@ -141,7 +131,7 @@ export function NovaReserva() {
                 <option value="">Selecione…</option>
                 {datas.map((d) => (
                   <option key={d} value={d}>
-                    {formatarData(d)}
+                    {diaComSemana(d)}
                   </option>
                 ))}
               </select>
@@ -181,7 +171,7 @@ export function NovaReserva() {
       {passo === 2 && (
         <section className="cartao pilha">
           <div className="texto-suave">
-            {formatarData(data)} · {turno && ROTULO_TURNO[turno]}
+            {diaComSemana(data)} · {turno && ROTULO_TURNO[turno]}
           </div>
 
           <div className="rotulo">
@@ -247,7 +237,7 @@ export function NovaReserva() {
           <div className="resumo">
             <div className="resumo-linha">
               <span className="resumo-rotulo">Data</span>
-              <span>{formatarData(data)}</span>
+              <span>{diaComSemana(data)}</span>
             </div>
             <div className="resumo-linha">
               <span className="resumo-rotulo">Turno</span>

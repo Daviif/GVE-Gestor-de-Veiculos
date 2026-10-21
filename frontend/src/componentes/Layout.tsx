@@ -31,7 +31,9 @@ export function Layout() {
         </div>
         <div className="topo-usuario">
           <Avatar nome={usuario.nome} />
-          <span className="topo-nome">{usuario.nome}</span>
+          <span className="topo-nome" title={usuario.nome}>
+            {usuario.nome}
+          </span>
           <button type="button" className="botao-borda botao-pequeno" onClick={() => void sair()}>
             Sair
           </button>

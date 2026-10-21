@@ -8,35 +8,10 @@ import {
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, ErroApi } from '../../api';
 import { useToast } from '../../toast/contexto';
+import { anoAtual, dataCurta, diaDaSemana, diaMes } from '../../datas';
 
 function mensagemDe(erro: unknown): string {
   return erro instanceof ErroApi ? erro.message : 'Erro inesperado. Tente novamente.';
-}
-
-/** Formata 'YYYY-MM-DD' em UTC (data pura, sem hora). */
-function formatar(data: string, opcoes: Intl.DateTimeFormatOptions): string {
-  return new Intl.DateTimeFormat('pt-BR', { ...opcoes, timeZone: 'UTC' }).format(
-    new Date(`${data}T00:00:00.000Z`),
-  );
-}
-
-/** '2026-10-12' → '12/10/2026'. */
-function dataCompleta(data: string): string {
-  return formatar(data, { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
-
-/** '2026-10-12' → 'Segunda'. */
-function diaDaSemana(data: string): string {
-  const dia = formatar(data, { weekday: 'long' }).split('-')[0]!;
-  return dia.charAt(0).toUpperCase() + dia.slice(1);
-}
-
-function anoAtual(): number {
-  return Number(
-    new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric' }).format(
-      new Date(),
-    ),
-  );
 }
 
 function plural(n: number, singular: string, plural: string): string {
@@ -48,7 +23,7 @@ function avisoReservas(feriados: Feriado[]): string | null {
   const comReservas = feriados.filter((f) => f.reservasAtivas > 0);
   if (comReservas.length === 0) return null;
   const datas = comReservas
-    .map((f) => `${dataCompleta(f.data)} (${plural(f.reservasAtivas, 'reserva', 'reservas')})`)
+    .map((f) => `${dataCurta(f.data)} (${plural(f.reservasAtivas, 'reserva', 'reservas')})`)
     .join(', ');
   return `Já existem reservas ativas em ${datas}. Elas não foram canceladas: avise os servidores ou cancele-as.`;
 }
@@ -205,7 +180,7 @@ export function Feriados() {
   async function excluir(feriado: Feriado) {
     if (
       !window.confirm(
-        `Excluir o feriado ${feriado.descricao} (${dataCompleta(feriado.data)})? A data volta a aceitar reservas.`,
+        `Excluir o feriado ${feriado.descricao} (${dataCurta(feriado.data)})? A data volta a aceitar reservas.`,
       )
     ) {
       return;
@@ -252,7 +227,7 @@ export function Feriados() {
           toast(
             feriado.data.startsWith(`${ano}-`)
               ? 'Feriado cadastrado.'
-              : `Feriado cadastrado em ${dataCompleta(feriado.data)}.`,
+              : `Feriado cadastrado em ${dataCurta(feriado.data)}.`,
           );
         }}
       />
@@ -298,12 +273,10 @@ export function Feriados() {
               <li
                 key={feriado.id}
                 className="linha"
-                aria-label={`${feriado.descricao}, ${dataCompleta(feriado.data)}`}
+                aria-label={`${feriado.descricao}, ${dataCurta(feriado.data)}`}
               >
                 <div className="linha-data">
-                  <div className="linha-data-dia">
-                    {formatar(feriado.data, { day: '2-digit', month: '2-digit' })}
-                  </div>
+                  <div className="linha-data-dia">{diaMes(feriado.data)}</div>
                   <div className="linha-data-semana">{diaDaSemana(feriado.data)}</div>
                 </div>
                 <div className="linha-titulo">
