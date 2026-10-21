@@ -818,14 +818,19 @@ p {
 
 /* Agenda da frota */
 
+/* Colunas iguais com 120px de mínimo; se a semana não couber (tablet, notebook com zoom),
+   rola dentro do cartão em vez de esconder os últimos dias. O fundo "local" acompanha a
+   rolagem, porque são ele e o gap que desenham as linhas da grade. */
 .agenda-grade {
   display: grid;
-  grid-template-columns: 110px repeat(7, 1fr);
+  grid-template-columns: 110px repeat(7, minmax(120px, 1fr));
   gap: 1px;
   background: var(--borda);
+  background-attachment: local;
   border: 1px solid var(--borda);
   border-radius: 12px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .agenda-cabecalho {
