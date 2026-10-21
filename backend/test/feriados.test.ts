@@ -156,6 +156,7 @@ describe('POST /feriados', () => {
     const resposta = await agente.post('/api/v1/feriados').send(corpo);
     expect(resposta.status).toBe(409);
     expect(resposta.body.erro.codigo).toBe('FERIADO_DUPLICADO');
+    expect(resposta.body.erro.campo).toBe('data');
   });
 
   it('valida a entrada', async () => {

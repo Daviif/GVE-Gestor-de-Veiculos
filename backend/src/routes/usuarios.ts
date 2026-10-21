@@ -60,9 +60,9 @@ async function verificarConflito(
   });
   if (!existente) return;
   if (existente.cpf === entrada.cpf) {
-    throw new ErroApi(409, 'CPF_DUPLICADO', 'Já existe um usuário com esse CPF.');
+    throw new ErroApi(409, 'CPF_DUPLICADO', 'Já existe um usuário com esse CPF.', 'cpf');
   }
-  throw new ErroApi(409, 'EMAIL_DUPLICADO', 'Já existe um usuário com esse e-mail.');
+  throw new ErroApi(409, 'EMAIL_DUPLICADO', 'Já existe um usuário com esse e-mail.', 'email');
 }
 
 /** Rede de segurança para a corrida entre dois cadastros simultâneos (o índice único do banco). */

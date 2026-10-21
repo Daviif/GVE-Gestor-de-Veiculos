@@ -7,6 +7,7 @@ import {
 } from '@gve/shared';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, ErroApi } from '../../api';
+import { useErrosDeCampo } from '../../componentes/errosDeCampo';
 import { useToast } from '../../toast/contexto';
 import { anoAtual, dataCurta, diaDaSemana, diaMes } from '../../datas';
 
@@ -39,14 +40,17 @@ function FormFeriado({ aoSalvar }: { aoSalvar(feriado: Feriado): void }) {
   const [abrangencia, setAbrangencia] = useState<Abrangencia>('MUNICIPAL');
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const campos = useErrosDeCampo();
 
-  async function enviar(evento: FormEvent) {
+  async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
+    const form = evento.currentTarget;
     setErro(null);
+    campos.limpar();
 
     const validacao = feriadoSchema.safeParse({ data, descricao, abrangencia });
     if (!validacao.success) {
-      setErro(validacao.error.issues[0]?.message ?? 'Dados inválidos.');
+      campos.deValidacao(form, validacao.error);
       return;
     }
 
@@ -60,7 +64,7 @@ function FormFeriado({ aoSalvar }: { aoSalvar(feriado: Feriado): void }) {
       setDescricao('');
       aoSalvar(r.feriado);
     } catch (e) {
-      setErro(mensagemDe(e));
+      if (!campos.deApi(form, e)) setErro(mensagemDe(e));
     } finally {
       setEnviando(false);
     }
@@ -69,34 +73,46 @@ function FormFeriado({ aoSalvar }: { aoSalvar(feriado: Feriado): void }) {
   return (
     <form className="cartao pilha" onSubmit={enviar} noValidate aria-label="Novo feriado">
       <div className="form-linha">
-        <input
-          className="campo campo-data"
-          type="date"
-          aria-label="Data"
-          value={data}
-          onChange={(e) => setData(e.target.value)}
-        />
-        <input
-          className="campo campo-nome"
-          type="text"
-          autoComplete="off"
-          placeholder="Nome do feriado"
-          aria-label="Nome do feriado"
-          value={descricao}
-          onChange={(e) => setDescricao(e.target.value)}
-        />
-        <select
-          className="campo campo-abrangencia"
-          aria-label="Abrangência"
-          value={abrangencia}
-          onChange={(e) => setAbrangencia(e.target.value as Abrangencia)}
-        >
-          {ABRANGENCIAS.map((a) => (
-            <option key={a} value={a}>
-              {ROTULO_ABRANGENCIA[a]}
-            </option>
-          ))}
-        </select>
+        <div className="campo-grupo campo-data">
+          <input
+            className="campo"
+            type="date"
+            aria-label="Data"
+            value={data}
+            onChange={(e) => setData(e.target.value)}
+            {...campos.props('data')}
+          />
+          {campos.mensagem('data')}
+        </div>
+        <div className="campo-grupo campo-nome">
+          <input
+            className="campo"
+            type="text"
+            autoComplete="off"
+            placeholder="Nome do feriado"
+            aria-label="Nome do feriado"
+            value={descricao}
+            onChange={(e) => setDescricao(e.target.value)}
+            {...campos.props('descricao')}
+          />
+          {campos.mensagem('descricao')}
+        </div>
+        <div className="campo-grupo campo-abrangencia">
+          <select
+            className="campo"
+            aria-label="Abrangência"
+            value={abrangencia}
+            onChange={(e) => setAbrangencia(e.target.value as Abrangencia)}
+            {...campos.props('abrangencia')}
+          >
+            {ABRANGENCIAS.map((a) => (
+              <option key={a} value={a}>
+                {ROTULO_ABRANGENCIA[a]}
+              </option>
+            ))}
+          </select>
+          {campos.mensagem('abrangencia')}
+        </div>
         <button type="submit" className="botao" disabled={enviando}>
           {enviando ? 'Salvando…' : 'Cadastrar'}
         </button>

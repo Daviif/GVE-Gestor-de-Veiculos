@@ -327,6 +327,7 @@ describe('PUT /auth/senha', () => {
     const repetida = await agente.put('/api/v1/auth/senha').send({ novaSenha: SENHA });
     expect(repetida.status).toBe(400);
     expect(repetida.body.erro.codigo).toBe('SENHA_REPETIDA');
+    expect(repetida.body.erro.campo).toBe('novaSenha');
 
     const resposta = await agente.put('/api/v1/auth/senha').send({ novaSenha: 'nova-senha-456' });
     expect(resposta.status).toBe(200);
@@ -349,6 +350,7 @@ describe('PUT /auth/senha', () => {
       .send({ senhaAtual: 'errada', novaSenha: 'nova-senha-456' });
     expect(resposta.status).toBe(400);
     expect(resposta.body.erro.codigo).toBe('SENHA_ATUAL_INCORRETA');
+    expect(resposta.body.erro.campo).toBe('senhaAtual');
   });
 
   it('exige sessão', async () => {
