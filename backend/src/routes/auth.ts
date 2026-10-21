@@ -37,6 +37,7 @@ function paraSessao(usuario: Usuario): UsuarioSessao {
 
 /** Quando o login fica liberado de novo, ou null se não está bloqueado. */
 async function bloqueadoAte(
+  tx: Prisma.TransactionClient,
   usuario: Usuario | null,
   login: string,
   agora: number,
@@ -47,7 +48,7 @@ async function bloqueadoAte(
   if (usuario) {
     filtro = { usuarioId: usuario.id };
     // Um login certo zera a contagem.
-    const ultimoLogin = await prisma.logAuditoria.findFirst({
+    const ultimoLogin = await tx.logAuditoria.findFirst({
       where: { usuarioId: usuario.id, acao: 'LOGIN', criadoEm: { gte: desde } },
       orderBy: { criadoEm: 'desc' },
       select: { criadoEm: true },
@@ -57,7 +58,7 @@ async function bloqueadoAte(
     filtro = { usuarioId: null, detalhes: { path: ['login'], equals: login } };
   }
 
-  const falhas = await prisma.logAuditoria.findMany({
+  const falhas = await tx.logAuditoria.findMany({
     where: {
       ...filtro,
       acao: 'LOGIN_FALHA',
@@ -85,51 +86,80 @@ rotasAuth.post('/login', async (req, res) => {
       })
     : null;
 
-  const falha = (motivo: string) =>
-    registrarAuditoria({
-      acao: 'LOGIN_FALHA',
-      usuarioId: usuario?.id ?? null,
-      detalhes: usuario ? { motivo } : { motivo, login: login.valor },
-      ip: req.ip,
-    });
+  // Tentativas na mesma conta (ou no mesmo login inexistente) passam uma de cada vez:
+  // conferir o bloqueio, testar a senha e gravar a falha é atômico. Sem isso, várias
+  // tentativas em paralelo veriam a contagem antiga e passariam do limite.
+  const chave = usuario ? `usuario:${usuario.id}` : `login:${login.valor}`;
+  const erro = await prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${chave}))`;
 
-  const liberaEm = await bloqueadoAte(usuario, login.valor, agora);
-  if (liberaEm) {
-    await falha('BLOQUEADO');
-    const minutos = Math.max(1, Math.ceil((liberaEm.getTime() - agora) / 60_000));
-    throw new ErroApi(
-      429,
-      'LOGIN_BLOQUEADO',
-      `Muitas tentativas sem sucesso. Tente novamente em ${minutos} min.`,
-    );
-  }
+      const falha = async (motivo: string, erroApi: ErroApi) => {
+        await tx.logAuditoria.create({
+          data: {
+            acao: 'LOGIN_FALHA',
+            usuarioId: usuario?.id ?? null,
+            detalhes: usuario ? { motivo } : { motivo, login: login.valor },
+            ip: req.ip,
+          },
+        });
+        return erroApi;
+      };
 
-  if (!usuario) {
-    hashFicticio ??= gerarHashSenha('senha-ficticia');
-    await conferirSenha(await hashFicticio, entrada.senha);
-    await falha('CREDENCIAIS');
-    throw new ErroApi(401, 'CREDENCIAIS_INVALIDAS', CREDENCIAIS_INVALIDAS);
-  }
+      const liberaEm = await bloqueadoAte(tx, usuario, login.valor, agora);
+      if (liberaEm) {
+        const minutos = Math.max(1, Math.ceil((liberaEm.getTime() - agora) / 60_000));
+        return falha(
+          'BLOQUEADO',
+          new ErroApi(
+            429,
+            'LOGIN_BLOQUEADO',
+            `Muitas tentativas sem sucesso. Tente novamente em ${minutos} min.`,
+          ),
+        );
+      }
 
-  if (!(await conferirSenha(usuario.senhaHash, entrada.senha))) {
-    await falha('CREDENCIAIS');
-    throw new ErroApi(401, 'CREDENCIAIS_INVALIDAS', CREDENCIAIS_INVALIDAS);
-  }
+      if (!usuario) {
+        hashFicticio ??= gerarHashSenha('senha-ficticia');
+        await conferirSenha(await hashFicticio, entrada.senha);
+        return falha(
+          'CREDENCIAIS',
+          new ErroApi(401, 'CREDENCIAIS_INVALIDAS', CREDENCIAIS_INVALIDAS),
+        );
+      }
 
-  // Só revela que a conta está desativada para quem acertou a senha.
-  if (!usuario.ativo) {
-    await falha('DESATIVADO');
-    throw new ErroApi(
-      403,
-      'USUARIO_DESATIVADO',
-      'Seu acesso está desativado. Procure o administrador.',
-    );
-  }
+      if (!(await conferirSenha(usuario.senhaHash, entrada.senha))) {
+        return falha(
+          'CREDENCIAIS',
+          new ErroApi(401, 'CREDENCIAIS_INVALIDAS', CREDENCIAIS_INVALIDAS),
+        );
+      }
 
-  const token = await abrirSessao(usuario.id);
-  await registrarAuditoria({ acao: 'LOGIN', usuarioId: usuario.id, ip: req.ip });
+      // Só revela que a conta está desativada para quem acertou a senha.
+      if (!usuario.ativo) {
+        return falha(
+          'DESATIVADO',
+          new ErroApi(
+            403,
+            'USUARIO_DESATIVADO',
+            'Seu acesso está desativado. Procure o administrador.',
+          ),
+        );
+      }
+
+      // Gravado ainda com o lock: zera a contagem antes da próxima tentativa.
+      await tx.logAuditoria.create({ data: { acao: 'LOGIN', usuarioId: usuario.id, ip: req.ip } });
+      return null;
+    },
+    // Tentativas na fila esperam o lock dentro da transação; o padrão de 5 s é curto para isso.
+    { maxWait: 10_000, timeout: 30_000 },
+  );
+  // O erro sai depois do commit, para a falha ficar gravada.
+  if (erro) throw erro;
+
+  const token = await abrirSessao(usuario!.id);
   gravarCookieSessao(res, token);
-  res.json({ usuario: paraSessao(usuario) });
+  res.json({ usuario: paraSessao(usuario!) });
 });
 
 /** Funciona mesmo com a sessão vencida: o objetivo é só apagar o cookie. */
