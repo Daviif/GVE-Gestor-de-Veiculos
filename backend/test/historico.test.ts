@@ -253,4 +253,31 @@ describe('GET /historico', () => {
     expect(resposta.status).toBe(400);
     expect(resposta.body.erro.codigo).toBe('INTERVALO_INVALIDO');
   });
+
+  it('recusa data impossível no calendário (ex.: 2026-02-30)', async () => {
+    const { agente } = await entrarComo('ADMINISTRADOR');
+    const resposta = await agente.get('/api/v1/historico').query({ inicio: '2026-02-30' });
+    expect(resposta.status).toBe(400);
+    expect(resposta.body.erro.codigo).toBe('ENTRADA_INVALIDA');
+  });
+});
+
+describe('GET /historico/veiculos', () => {
+  it('exige administrador', async () => {
+    const { agente } = await entrarComo('SERVIDOR');
+    const resposta = await agente.get('/api/v1/historico/veiculos');
+    expect(resposta.status).toBe(403);
+  });
+
+  it('lista veículos ativos e inativos, ativos primeiro', async () => {
+    const { agente } = await entrarComo('ADMINISTRADOR');
+    await prisma.veiculo.create({ data: { placa: 'AAA1A11', modelo: 'Argo', ativo: true } });
+    await prisma.veiculo.create({ data: { placa: 'BBB2B22', modelo: 'Onix', ativo: false } });
+
+    const resposta = await agente.get('/api/v1/historico/veiculos');
+    expect(resposta.status).toBe(200);
+    expect(resposta.body.veiculos).toHaveLength(2);
+    expect(resposta.body.veiculos[0]).toMatchObject({ placa: 'AAA1A11', ativo: true });
+    expect(resposta.body.veiculos[1]).toMatchObject({ placa: 'BBB2B22', ativo: false });
+  });
 });

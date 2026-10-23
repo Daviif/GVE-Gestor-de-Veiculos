@@ -5,7 +5,7 @@ import {
   type RespostaHistorico,
   type SituacaoHistorico,
   type Usuario,
-  type VeiculoDisponivel,
+  type VeiculoHistorico,
 } from '@gve/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { api, ErroApi } from '../../api';
@@ -100,6 +100,17 @@ function montarQuery(
   return params.toString();
 }
 
+/**
+ * Resultado da busca para uma dada chave de filtros. `carregando` só termina
+ * depois que a chave recebeu uma resposta OU um erro — por isso o estado
+ * guarda os dois: trocar o estado por `null` ao começar causaria o "flash"
+ * de lista vazia; manter os dois unidos pela chave evita que um erro deixe
+ * a tela presa em "Carregando…".
+ */
+type Resultado =
+  | { tipo: 'ok'; chave: string; resposta: RespostaHistorico }
+  | { tipo: 'erro'; chave: string; mensagem: string };
+
 /** Histórico de reservas (RF16) com filtros por período, veículo e servidor. */
 export function Historico() {
   const hoje = useMemo(() => hojeEmSP(), []);
@@ -108,19 +119,18 @@ export function Historico() {
   const [veiculoId, setVeiculoId] = useState('');
   const [pagina, setPagina] = useState(1);
 
-  const [carregado, setCarregado] = useState<{ chave: string; resposta: RespostaHistorico } | null>(
-    null,
-  );
-  const [erro, setErro] = useState<string | null>(null);
+  const [resultado, setResultado] = useState<Resultado | null>(null);
+  // Tentativa dispara nova busca mesmo quando a chave não muda (botão "Tentar de novo").
+  const [tentativa, setTentativa] = useState(0);
 
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-  const [veiculos, setVeiculos] = useState<VeiculoDisponivel[]>([]);
+  const [veiculos, setVeiculos] = useState<VeiculoHistorico[]>([]);
 
   const chave = useMemo(
     () => montarQuery(periodo, usuarioId, veiculoId, pagina, hoje),
     [periodo, usuarioId, veiculoId, pagina, hoje],
   );
-  const carregando = carregado?.chave !== chave;
+  const carregando = resultado?.chave !== chave;
 
   // Qualquer mudança de filtro volta para a página 1 (sem resetar via effect).
   function trocarPeriodo(p: Periodo) {
@@ -145,36 +155,32 @@ export function Historico() {
       });
   }, []);
 
-  // Lista de veículos para o filtro. Enquanto a #13 não traz uma listagem
-  // pública, aproveito /reservas/disponibilidade com uma data futura — ela já
-  // devolve os veículos ativos (que são os que normalmente aparecem no histórico).
+  // Lista de veículos para o filtro: inclui ativos e inativos (um veículo já
+  // desativado ainda pode ter reservas antigas que o admin queira filtrar).
   useEffect(() => {
-    const dataConsulta = somar(hoje, 7);
-    const url = `/reservas/disponibilidade?data=${dataConsulta}&turno=MATUTINO`;
-    api<{ veiculos: VeiculoDisponivel[] }>(url)
+    api<{ veiculos: VeiculoHistorico[] }>('/historico/veiculos')
       .then((r) => setVeiculos(r.veiculos))
       .catch(() => {
-        /* se não listar, o filtro mostra só "Todos" */
+        /* se falhar, o filtro mostra só "Todos" */
       });
-  }, [hoje]);
+  }, []);
 
   useEffect(() => {
     let ativo = true;
     api<RespostaHistorico>(`/historico?${chave}`)
       .then((r) => {
-        if (!ativo) return;
-        setCarregado({ chave, resposta: r });
-        setErro(null);
+        if (ativo) setResultado({ tipo: 'ok', chave, resposta: r });
       })
       .catch((e) => {
-        if (ativo) setErro(mensagemDe(e));
+        if (ativo) setResultado({ tipo: 'erro', chave, mensagem: mensagemDe(e) });
       });
     return () => {
       ativo = false;
     };
-  }, [chave]);
+  }, [chave, tentativa]);
 
-  const resposta = carregado?.resposta;
+  const resposta = resultado?.tipo === 'ok' ? resultado.resposta : undefined;
+  const erro = resultado?.tipo === 'erro' ? resultado.mensagem : null;
   const totalPaginas = resposta ? Math.max(1, Math.ceil(resposta.total / resposta.tamanho)) : 1;
   const paginaAtual = resposta?.pagina ?? pagina;
   const total = resposta?.total ?? 0;
@@ -206,6 +212,7 @@ export function Historico() {
           {veiculos.map((v) => (
             <option key={v.id} value={v.id}>
               {v.modelo} · {v.placa}
+              {v.ativo ? '' : ' (desativado)'}
             </option>
           ))}
         </select>
@@ -226,24 +233,33 @@ export function Historico() {
       </div>
 
       {erro && (
-        <p className="erro" role="alert">
-          {erro}
-        </p>
+        <div className="aviso-erro">
+          <p className="erro" role="alert">
+            {erro}
+          </p>
+          <button
+            type="button"
+            className="botao-borda botao-pequeno"
+            onClick={() => setTentativa((n) => n + 1)}
+          >
+            Tentar de novo
+          </button>
+        </div>
       )}
 
       <div className="historico-contagem">
         {carregando ? 'Carregando…' : `${total} ${total === 1 ? 'registro' : 'registros'}`}
       </div>
 
-      {!carregando && resposta && resposta.itens.length === 0 ? (
+      {!carregando && !erro && resposta && resposta.itens.length === 0 ? (
         <div className="vazio">Nenhuma reserva encontrada para esses filtros.</div>
-      ) : (
+      ) : resposta ? (
         <div className="historico-lista">
-          {resposta?.itens.map((item) => (
+          {resposta.itens.map((item) => (
             <LinhaHistorico key={item.id} item={item} />
           ))}
         </div>
-      )}
+      ) : null}
 
       {totalPaginas > 1 && (
         <div className="paginacao">

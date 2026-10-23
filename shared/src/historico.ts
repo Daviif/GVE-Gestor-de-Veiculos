@@ -4,7 +4,14 @@ import { TURNOS, type Turno } from './reservas';
 export const HISTORICO_TAMANHO_PADRAO = 25;
 export const HISTORICO_TAMANHO_MAX = 100;
 
-const dataSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida.');
+/** Aceita só 'YYYY-MM-DD' que represente um dia real (recusa 2026-02-30 etc.). */
+const dataSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida.')
+  .refine((valor) => {
+    const d = new Date(`${valor}T00:00:00.000Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === valor;
+  }, 'Data inválida.');
 
 /** RF16: consulta do histórico de reservas com filtros e paginação. */
 export const historicoQuerySchema = z.object({
@@ -44,6 +51,14 @@ export interface RespostaHistorico {
   pagina: number;
   tamanho: number;
   total: number;
+}
+
+/** Veículo listado para o filtro (inclui inativos, para filtrar reservas antigas). */
+export interface VeiculoHistorico {
+  id: number;
+  placa: string;
+  modelo: string;
+  ativo: boolean;
 }
 
 export { TURNOS };

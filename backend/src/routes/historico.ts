@@ -16,6 +16,19 @@ export const rotasHistorico = Router();
 // Histórico das reservas (RF16): só o administrador consulta.
 rotasHistorico.use(autenticar(), exigirPerfil('ADMINISTRADOR'));
 
+/**
+ * Veículos para popular o filtro do histórico. Inclui os inativos (podem ter
+ * reservas antigas que o admin ainda queira filtrar) e independe da regra de
+ * disponibilidade por data/turno — por isso vive aqui, e não em `/reservas`.
+ */
+rotasHistorico.get('/veiculos', async (_req, res) => {
+  const veiculos = await prisma.veiculo.findMany({
+    orderBy: [{ ativo: 'desc' }, { modelo: 'asc' }, { placa: 'asc' }],
+    select: { id: true, placa: true, modelo: true, ativo: true },
+  });
+  res.json({ veiculos });
+});
+
 function montarFiltro(q: ReturnType<typeof historicoQuerySchema.parse>): Prisma.ReservaWhereInput {
   const where: Prisma.ReservaWhereInput = {};
   if (q.inicio || q.fim) {

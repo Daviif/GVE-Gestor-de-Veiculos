@@ -1046,6 +1046,22 @@ p {
   color: var(--texto-suave);
 }
 
+.aviso-erro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--vermelho-fundo);
+  border: 1px solid var(--vermelho-borda);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.aviso-erro .erro {
+  margin: 0;
+}
+
 .historico-lista {
   background: #fff;
   border: 1px solid var(--borda);
