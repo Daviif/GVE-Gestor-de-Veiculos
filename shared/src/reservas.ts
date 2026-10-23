@@ -11,7 +11,14 @@ export const ROTULO_TURNO: Record<Turno, string> = {
 
 export const DESTINO_MAX = 200;
 
-const dataSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida.');
+/** 'YYYY-MM-DD' que existe no calendário (recusa 2026-02-31, que o Date viraria 03/03). */
+export const dataSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida.')
+  .refine(
+    (data) => new Date(`${data}T00:00:00.000Z`).toISOString().startsWith(data),
+    'Data inválida.',
+  );
 
 /** Nova reserva (RF06). Validado igual no formulário e na API. */
 export const novaReservaSchema = z.object({

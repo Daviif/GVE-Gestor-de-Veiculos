@@ -9,20 +9,10 @@ import {
 } from '@gve/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { api, ErroApi } from '../../api';
+import { dataComSemana, hojeEmSaoPaulo, somarDias } from '../../datas';
 
 function mensagemDe(erro: unknown): string {
   return erro instanceof ErroApi ? erro.message : 'Erro inesperado. Tente novamente.';
-}
-
-/** 'YYYY-MM-DD' do dia atual em São Paulo. */
-function hojeEmSP(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-}
-
-function somar(data: string, dias: number): string {
-  const d = new Date(`${data}T00:00:00.000Z`);
-  d.setUTCDate(d.getUTCDate() + dias);
-  return d.toISOString().slice(0, 10);
 }
 
 function primeiroDoMes(data: string): string {
@@ -45,21 +35,6 @@ function nomeMes(data: string): string {
   return nome.charAt(0).toUpperCase() + nome.slice(1);
 }
 
-/** 'YYYY-MM-DD' → 'Seg 19/10/2026'. */
-function formatarData(data: string): string {
-  const d = new Date(`${data}T00:00:00.000Z`);
-  const dow = new Intl.DateTimeFormat('pt-BR', { weekday: 'short', timeZone: 'UTC' })
-    .format(d)
-    .replace(/\./g, '');
-  const dmy = new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(d);
-  return `${dow.charAt(0).toUpperCase() + dow.slice(1)} ${dmy}`;
-}
-
 const ROTULO_SITUACAO: Record<SituacaoHistorico, string> = {
   AGENDADA: 'Agendada',
   CONCLUIDA: 'Concluída',
@@ -77,7 +52,7 @@ type Periodo = 'TUDO' | 'MES' | 'PASSADAS' | 'FUTURAS';
 
 function intervaloDe(periodo: Periodo, hoje: string): { inicio?: string; fim?: string } {
   if (periodo === 'MES') return { inicio: primeiroDoMes(hoje), fim: ultimoDoMes(hoje) };
-  if (periodo === 'PASSADAS') return { fim: somar(hoje, -1) };
+  if (periodo === 'PASSADAS') return { fim: somarDias(hoje, -1) };
   if (periodo === 'FUTURAS') return { inicio: hoje };
   return {};
 }
@@ -113,7 +88,7 @@ type Resultado =
 
 /** Histórico de reservas (RF16) com filtros por período, veículo e servidor. */
 export function Historico() {
-  const hoje = useMemo(() => hojeEmSP(), []);
+  const hoje = useMemo(() => hojeEmSaoPaulo(), []);
   const [periodo, setPeriodo] = useState<Periodo>('TUDO');
   const [usuarioId, setUsuarioId] = useState('');
   const [veiculoId, setVeiculoId] = useState('');
@@ -293,7 +268,7 @@ export function Historico() {
 function LinhaHistorico({ item }: { item: ItemHistorico }) {
   return (
     <div className="historico-linha">
-      <span className="historico-data">{formatarData(item.data)}</span>
+      <span className="historico-data">{dataComSemana(item.data)}</span>
       <span className="historico-turno">{ROTULO_TURNO[item.turno]}</span>
       <span className="historico-veic">
         {item.veiculo.modelo} · {item.veiculo.placa}

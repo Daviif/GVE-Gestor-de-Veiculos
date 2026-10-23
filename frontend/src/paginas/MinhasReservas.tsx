@@ -4,26 +4,10 @@ import { Link } from 'react-router';
 import { api, ErroApi } from '../api';
 import { useSessao } from '../auth/contexto';
 import { useToast } from '../toast/contexto';
+import { dataComSemana, hojeEmSaoPaulo } from '../datas';
 
 function mensagemDe(erro: unknown): string {
   return erro instanceof ErroApi ? erro.message : 'Erro inesperado. Tente novamente.';
-}
-
-/** 'YYYY-MM-DD' → 'seg, 20/10/2026'. Formatada em UTC (data pura, sem hora). */
-function formatarData(data: string): string {
-  const d = new Date(`${data}T00:00:00.000Z`);
-  return new Intl.DateTimeFormat('pt-BR', {
-    weekday: 'short',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(d);
-}
-
-/** 'YYYY-MM-DD' do dia atual em São Paulo. */
-function hojeEmSaoPaulo(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
 }
 
 interface PropsItem {
@@ -40,7 +24,7 @@ function ItemReserva({ reserva, podeCancelar, aoCancelar }: PropsItem) {
     >
       <div className="item-dados">
         <div className="item-titulo">
-          {formatarData(reserva.data)} · {ROTULO_TURNO[reserva.turno]}
+          {dataComSemana(reserva.data)} · {ROTULO_TURNO[reserva.turno]}
           {reserva.status === 'CANCELADA' && <span className="etiqueta">Cancelada</span>}
         </div>
         <div className="item-subtitulo">
@@ -92,7 +76,7 @@ export function MinhasReservas() {
   async function cancelar(reserva: Reserva) {
     if (
       !window.confirm(
-        `Cancelar a reserva de ${reserva.veiculo.placa} em ${formatarData(reserva.data)}?`,
+        `Cancelar a reserva de ${reserva.veiculo.placa} em ${dataComSemana(reserva.data)}?`,
       )
     ) {
       return;

@@ -1,5 +1,6 @@
 import { loginSchema, normalizarLogin, trocaSenhaSchema, type UsuarioSessao } from '@gve/shared';
 import { Router } from 'express';
+import { MemoryStore, rateLimit } from 'express-rate-limit';
 import { registrarAuditoria } from '../auditoria';
 import { prisma } from '../db';
 import type { Prisma, Usuario } from '../generated/prisma/client';
@@ -18,6 +19,36 @@ import {
 /** Bloqueio após 5 tentativas erradas em 15 min, por conta (ou pelo login digitado, se não existe). */
 export const MAX_TENTATIVAS = 5;
 export const JANELA_TENTATIVAS_MS = 15 * 60 * 1000;
+
+/**
+ * Falhas de login aceitas por IP a cada minuto, somando todas as contas. O bloqueio por conta
+ * não segura quem tenta uma conta diferente a cada vez, e cada tentativa custa um Argon2
+ * (19 MiB e CPU): sem isso, uma rajada derruba a VPS. Logins certos não contam, para não
+ * barrar uma secretaria inteira que sai pelo mesmo IP.
+ */
+export const MAX_FALHAS_POR_IP = 20;
+export const JANELA_FALHAS_POR_IP_MS = 60 * 1000;
+
+/** Em memória: basta para uma instância só da API. Exportado para os testes zerarem. */
+export const falhasPorIp = new MemoryStore();
+
+const limitarFalhasPorIp = rateLimit({
+  windowMs: JANELA_FALHAS_POR_IP_MS,
+  limit: MAX_FALHAS_POR_IP,
+  skipSuccessfulRequests: true,
+  store: falhasPorIp,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  handler: (_req, _res, next) => {
+    next(
+      new ErroApi(
+        429,
+        'MUITAS_TENTATIVAS',
+        'Muitas tentativas de login sem sucesso a partir desta rede. Aguarde 1 minuto.',
+      ),
+    );
+  },
+});
 
 const CREDENCIAIS_INVALIDAS = 'E-mail/CPF ou senha incorretos.';
 
@@ -76,7 +107,7 @@ async function bloqueadoAte(
   return new Date(quintaFalha.criadoEm.getTime() + JANELA_TENTATIVAS_MS);
 }
 
-rotasAuth.post('/login', async (req, res) => {
+rotasAuth.post('/login', limitarFalhasPorIp, async (req, res) => {
   const entrada = loginSchema.parse(req.body);
   const login = normalizarLogin(entrada.login);
   const agora = Date.now();

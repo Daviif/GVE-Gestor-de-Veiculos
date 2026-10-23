@@ -3,6 +3,7 @@ import { config } from './config';
 import { rotaNaoEncontrada, tratarErros } from './middleware/erros';
 import { rotasAgenda } from './routes/agenda';
 import { rotasAuth } from './routes/auth';
+import { rotasFeriados } from './routes/feriados';
 import { rotasHistorico } from './routes/historico';
 import { rotasReservas } from './routes/reservas';
 import { rotasSaude } from './routes/saude';
@@ -21,6 +22,7 @@ export function criarApp() {
   app.use('/api/v1/reservas', rotasReservas);
   app.use('/api/v1/agenda', rotasAgenda);
   app.use('/api/v1/usuarios', rotasUsuarios);
+  app.use('/api/v1/feriados', rotasFeriados);
   app.use('/api/v1/historico', rotasHistorico);
 
   app.use('/api', rotaNaoEncontrada);
