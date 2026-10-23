@@ -1,0 +1,283 @@
+import {
+  HISTORICO_TAMANHO_PADRAO,
+  ROTULO_TURNO,
+  type ItemHistorico,
+  type RespostaHistorico,
+  type SituacaoHistorico,
+  type Usuario,
+  type VeiculoHistorico,
+} from '@gve/shared';
+import { useEffect, useMemo, useState } from 'react';
+import { api, ErroApi } from '../../api';
+import { dataComSemana, hojeEmSaoPaulo, somarDias } from '../../datas';
+
+function mensagemDe(erro: unknown): string {
+  return erro instanceof ErroApi ? erro.message : 'Erro inesperado. Tente novamente.';
+}
+
+function primeiroDoMes(data: string): string {
+  return `${data.slice(0, 7)}-01`;
+}
+
+function ultimoDoMes(data: string): string {
+  const d = new Date(`${data}T00:00:00.000Z`);
+  d.setUTCMonth(d.getUTCMonth() + 1, 0);
+  return d.toISOString().slice(0, 10);
+}
+
+function nomeMes(data: string): string {
+  const d = new Date(`${data}T00:00:00.000Z`);
+  const nome = new Intl.DateTimeFormat('pt-BR', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(d);
+  return nome.charAt(0).toUpperCase() + nome.slice(1);
+}
+
+const ROTULO_SITUACAO: Record<SituacaoHistorico, string> = {
+  AGENDADA: 'Agendada',
+  CONCLUIDA: 'Concluída',
+  CANCELADA: 'Cancelada',
+};
+
+const COR_SITUACAO: Record<SituacaoHistorico, string> = {
+  AGENDADA: 'var(--azul)',
+  CONCLUIDA: 'var(--texto-apagado)',
+  CANCELADA: 'var(--vermelho)',
+};
+
+/** Opções do filtro de período (preset): os valores viram inicio/fim na API. */
+type Periodo = 'TUDO' | 'MES' | 'PASSADAS' | 'FUTURAS';
+
+function intervaloDe(periodo: Periodo, hoje: string): { inicio?: string; fim?: string } {
+  if (periodo === 'MES') return { inicio: primeiroDoMes(hoje), fim: ultimoDoMes(hoje) };
+  if (periodo === 'PASSADAS') return { fim: somarDias(hoje, -1) };
+  if (periodo === 'FUTURAS') return { inicio: hoje };
+  return {};
+}
+
+function montarQuery(
+  periodo: Periodo,
+  usuarioId: string,
+  veiculoId: string,
+  pagina: number,
+  hoje: string,
+): string {
+  const params = new URLSearchParams();
+  const { inicio, fim } = intervaloDe(periodo, hoje);
+  if (inicio) params.set('inicio', inicio);
+  if (fim) params.set('fim', fim);
+  if (usuarioId) params.set('usuarioId', usuarioId);
+  if (veiculoId) params.set('veiculoId', veiculoId);
+  params.set('pagina', String(pagina));
+  params.set('tamanho', String(HISTORICO_TAMANHO_PADRAO));
+  return params.toString();
+}
+
+/**
+ * Resultado da busca para uma dada chave de filtros. `carregando` só termina
+ * depois que a chave recebeu uma resposta OU um erro — por isso o estado
+ * guarda os dois: trocar o estado por `null` ao começar causaria o "flash"
+ * de lista vazia; manter os dois unidos pela chave evita que um erro deixe
+ * a tela presa em "Carregando…".
+ */
+type Resultado =
+  | { tipo: 'ok'; chave: string; resposta: RespostaHistorico }
+  | { tipo: 'erro'; chave: string; mensagem: string };
+
+/** Histórico de reservas (RF16) com filtros por período, veículo e servidor. */
+export function Historico() {
+  const hoje = useMemo(() => hojeEmSaoPaulo(), []);
+  const [periodo, setPeriodo] = useState<Periodo>('TUDO');
+  const [usuarioId, setUsuarioId] = useState('');
+  const [veiculoId, setVeiculoId] = useState('');
+  const [pagina, setPagina] = useState(1);
+
+  const [resultado, setResultado] = useState<Resultado | null>(null);
+  // Tentativa dispara nova busca mesmo quando a chave não muda (botão "Tentar de novo").
+  const [tentativa, setTentativa] = useState(0);
+
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [veiculos, setVeiculos] = useState<VeiculoHistorico[]>([]);
+
+  const chave = useMemo(
+    () => montarQuery(periodo, usuarioId, veiculoId, pagina, hoje),
+    [periodo, usuarioId, veiculoId, pagina, hoje],
+  );
+  const carregando = resultado?.chave !== chave;
+
+  // Qualquer mudança de filtro volta para a página 1 (sem resetar via effect).
+  function trocarPeriodo(p: Periodo) {
+    setPeriodo(p);
+    setPagina(1);
+  }
+  function trocarUsuario(id: string) {
+    setUsuarioId(id);
+    setPagina(1);
+  }
+  function trocarVeiculo(id: string) {
+    setVeiculoId(id);
+    setPagina(1);
+  }
+
+  // Lista de servidores para o filtro.
+  useEffect(() => {
+    api<{ usuarios: Usuario[] }>('/usuarios')
+      .then((r) => setUsuarios(r.usuarios))
+      .catch(() => {
+        /* o filtro de servidor pode ficar vazio sem travar a tela */
+      });
+  }, []);
+
+  // Lista de veículos para o filtro: inclui ativos e inativos (um veículo já
+  // desativado ainda pode ter reservas antigas que o admin queira filtrar).
+  useEffect(() => {
+    api<{ veiculos: VeiculoHistorico[] }>('/historico/veiculos')
+      .then((r) => setVeiculos(r.veiculos))
+      .catch(() => {
+        /* se falhar, o filtro mostra só "Todos" */
+      });
+  }, []);
+
+  useEffect(() => {
+    let ativo = true;
+    api<RespostaHistorico>(`/historico?${chave}`)
+      .then((r) => {
+        if (ativo) setResultado({ tipo: 'ok', chave, resposta: r });
+      })
+      .catch((e) => {
+        if (ativo) setResultado({ tipo: 'erro', chave, mensagem: mensagemDe(e) });
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [chave, tentativa]);
+
+  const resposta = resultado?.tipo === 'ok' ? resultado.resposta : undefined;
+  const erro = resultado?.tipo === 'erro' ? resultado.mensagem : null;
+  const totalPaginas = resposta ? Math.max(1, Math.ceil(resposta.total / resposta.tamanho)) : 1;
+  const paginaAtual = resposta?.pagina ?? pagina;
+  const total = resposta?.total ?? 0;
+
+  return (
+    <div className="pagina pagina-historico">
+      <h1 className="titulo-pagina">Histórico</h1>
+
+      <div className="filtros-historico">
+        <select
+          className="campo"
+          value={periodo}
+          onChange={(e) => trocarPeriodo(e.target.value as Periodo)}
+          aria-label="Período"
+        >
+          <option value="TUDO">Todo o período</option>
+          <option value="MES">{nomeMes(hoje)}</option>
+          <option value="PASSADAS">Já realizadas</option>
+          <option value="FUTURAS">Agendadas</option>
+        </select>
+
+        <select
+          className="campo"
+          value={veiculoId}
+          onChange={(e) => trocarVeiculo(e.target.value)}
+          aria-label="Veículo"
+        >
+          <option value="">Todos os veículos</option>
+          {veiculos.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.modelo} · {v.placa}
+              {v.ativo ? '' : ' (desativado)'}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className="campo"
+          value={usuarioId}
+          onChange={(e) => trocarUsuario(e.target.value)}
+          aria-label="Servidor"
+        >
+          <option value="">Todos os servidores</option>
+          {usuarios.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.nome}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {erro && (
+        <div className="aviso-erro">
+          <p className="erro" role="alert">
+            {erro}
+          </p>
+          <button
+            type="button"
+            className="botao-borda botao-pequeno"
+            onClick={() => setTentativa((n) => n + 1)}
+          >
+            Tentar de novo
+          </button>
+        </div>
+      )}
+
+      <div className="historico-contagem">
+        {carregando ? 'Carregando…' : `${total} ${total === 1 ? 'registro' : 'registros'}`}
+      </div>
+
+      {!carregando && !erro && resposta && resposta.itens.length === 0 ? (
+        <div className="vazio">Nenhuma reserva encontrada para esses filtros.</div>
+      ) : resposta ? (
+        <div className="historico-lista">
+          {resposta.itens.map((item) => (
+            <LinhaHistorico key={item.id} item={item} />
+          ))}
+        </div>
+      ) : null}
+
+      {totalPaginas > 1 && (
+        <div className="paginacao">
+          <span className="texto-suave">
+            Página {paginaAtual} de {totalPaginas}
+          </span>
+          <div className="acoes">
+            <button
+              type="button"
+              className="botao-borda botao-pequeno"
+              disabled={paginaAtual <= 1}
+              onClick={() => setPagina((p) => p - 1)}
+            >
+              ← Anterior
+            </button>
+            <button
+              type="button"
+              className="botao-borda botao-pequeno"
+              disabled={paginaAtual >= totalPaginas}
+              onClick={() => setPagina((p) => p + 1)}
+            >
+              Próxima →
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LinhaHistorico({ item }: { item: ItemHistorico }) {
+  return (
+    <div className="historico-linha">
+      <span className="historico-data">{dataComSemana(item.data)}</span>
+      <span className="historico-turno">{ROTULO_TURNO[item.turno]}</span>
+      <span className="historico-veic">
+        {item.veiculo.modelo} · {item.veiculo.placa}
+      </span>
+      <span className="historico-user">{item.usuario.nome}</span>
+      <span className="historico-dest">{item.destino}</span>
+      <span className="historico-status" style={{ color: COR_SITUACAO[item.situacao] }}>
+        {ROTULO_SITUACAO[item.situacao]}
+      </span>
+    </div>
+  );
+}
