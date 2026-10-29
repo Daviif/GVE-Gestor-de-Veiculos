@@ -5,11 +5,16 @@ export const TURNOS = ['MATUTINO', 'VESPERTINO'] as const;
 export type Turno = (typeof TURNOS)[number];
 
 export const ROTULO_TURNO: Record<Turno, string> = {
-  MATUTINO: 'Matutino',
-  VESPERTINO: 'Vespertino',
+  MATUTINO: 'Manhã',
+  VESPERTINO: 'Tarde',
 };
 
 export const DESTINO_MAX = 200;
+
+/** RN02, RN03: a reserva é feita de 5 a 7 dias à frente. A API valida; a agenda usa para
+ *  mostrar "+ reservar" só nas células em que a reserva é permitida. */
+export const ANTECEDENCIA_MIN = 5;
+export const ANTECEDENCIA_MAX = 7;
 
 /** 'YYYY-MM-DD' que existe no calendário (recusa 2026-02-31, que o Date viraria 03/03). */
 export const dataSchema = z
@@ -96,4 +101,24 @@ export interface ReservaAgenda {
   destino: string;
   veiculo: { id: number; placa: string; modelo: string };
   usuario: { id: number; nome: string };
+}
+
+/** Veículo que ganha linha na agenda (os ativos, mais os que têm reserva na janela). */
+export interface VeiculoAgenda {
+  id: number;
+  placa: string;
+  modelo: string;
+}
+
+/** Feriado da janela: a agenda mostra o dia fechado para reservas (RN11). */
+export interface FeriadoAgenda {
+  data: string;
+  descricao: string;
+}
+
+/** Resposta de GET /agenda: tudo o que a grade precisa para desenhar também as células livres. */
+export interface RespostaAgenda {
+  reservas: ReservaAgenda[];
+  veiculos: VeiculoAgenda[];
+  feriados: FeriadoAgenda[];
 }

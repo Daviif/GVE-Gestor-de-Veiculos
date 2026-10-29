@@ -1,4 +1,9 @@
-import { AGENDA_JANELA_MAX_DIAS, agendaQuerySchema, type ReservaAgenda } from '@gve/shared';
+import {
+  AGENDA_JANELA_MAX_DIAS,
+  agendaQuerySchema,
+  type ReservaAgenda,
+  type RespostaAgenda,
+} from '@gve/shared';
 import { Router } from 'express';
 import { deDataBanco, paraDataBanco, somarDias } from '../datas';
 import { prisma } from '../db';
@@ -9,7 +14,10 @@ export const rotasAgenda = Router();
 
 rotasAgenda.use(autenticar());
 
-/** RF13: as reservas ativas de uma janela de até 31 dias, com veículo e quem reservou. */
+/**
+ * RF13: a agenda de uma janela de até 31 dias. Devolve as reservas ativas (com veículo e quem
+ * reservou) e, para a grade desenhar também as células livres, os veículos e os feriados.
+ */
 rotasAgenda.get('/', async (req, res) => {
   const { inicio, fim } = agendaQuerySchema.parse(req.query);
   if (fim < inicio) {
@@ -24,29 +32,48 @@ rotasAgenda.get('/', async (req, res) => {
     );
   }
 
-  const reservas = await prisma.reserva.findMany({
-    where: {
-      status: 'ATIVA',
-      data: { gte: paraDataBanco(inicio), lte: paraDataBanco(fim) },
-    },
-    orderBy: [{ data: 'asc' }, { turno: 'asc' }, { id: 'asc' }],
-    select: {
-      id: true,
-      data: true,
-      turno: true,
-      destino: true,
-      veiculo: { select: { id: true, placa: true, modelo: true } },
-      usuario: { select: { id: true, nome: true } },
-    },
+  const intervalo = { gte: paraDataBanco(inicio), lte: paraDataBanco(fim) };
+
+  const [reservas, feriados] = await Promise.all([
+    prisma.reserva.findMany({
+      where: { status: 'ATIVA', data: intervalo },
+      orderBy: [{ data: 'asc' }, { turno: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        data: true,
+        turno: true,
+        destino: true,
+        veiculo: { select: { id: true, placa: true, modelo: true } },
+        usuario: { select: { id: true, nome: true } },
+      },
+    }),
+    prisma.feriado.findMany({
+      where: { data: intervalo },
+      orderBy: { data: 'asc' },
+      select: { data: true, descricao: true },
+    }),
+  ]);
+
+  // Linhas da grade: os veículos ativos e, para não perder reserva de carro já desativado
+  // (semana passada, por exemplo), os que aparecem nas reservas da janela.
+  const comReserva = [...new Set(reservas.map((r) => r.veiculo.id))];
+  const veiculos = await prisma.veiculo.findMany({
+    where: { OR: [{ ativo: true }, { id: { in: comReserva } }] },
+    orderBy: [{ modelo: 'asc' }, { placa: 'asc' }],
+    select: { id: true, placa: true, modelo: true },
   });
 
-  const resposta: ReservaAgenda[] = reservas.map((r) => ({
-    id: r.id,
-    data: deDataBanco(r.data),
-    turno: r.turno,
-    destino: r.destino,
-    veiculo: r.veiculo,
-    usuario: r.usuario,
-  }));
-  res.json({ reservas: resposta });
+  const resposta: RespostaAgenda = {
+    reservas: reservas.map((r): ReservaAgenda => ({
+      id: r.id,
+      data: deDataBanco(r.data),
+      turno: r.turno,
+      destino: r.destino,
+      veiculo: r.veiculo,
+      usuario: r.usuario,
+    })),
+    veiculos,
+    feriados: feriados.map((f) => ({ data: deDataBanco(f.data), descricao: f.descricao })),
+  };
+  res.json(resposta);
 });

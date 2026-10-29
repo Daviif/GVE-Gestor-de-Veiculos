@@ -1,11 +1,8 @@
 // Datas da reserva são locais (America/Sao_Paulo) e sem hora. A coluna é @db.Date;
 // no banco guardamos a meia-noite UTC do dia, e sempre trafegamos 'YYYY-MM-DD' na API.
 
+import { ANTECEDENCIA_MAX, ANTECEDENCIA_MIN } from '@gve/shared';
 import type { Prisma } from './generated/prisma/client';
-
-/** RN02, RN03: a reserva é feita de 5 a 7 dias à frente. */
-export const ANTECEDENCIA_MIN = 5;
-export const ANTECEDENCIA_MAX = 7;
 
 const FUSO = 'America/Sao_Paulo';
 

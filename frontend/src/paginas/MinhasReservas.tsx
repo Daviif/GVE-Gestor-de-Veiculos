@@ -3,8 +3,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { api, ErroApi } from '../api';
 import { useSessao } from '../auth/contexto';
-import { useToast } from '../toast/contexto';
 import { dataComSemana, hojeEmSaoPaulo } from '../datas';
+import { useToast } from '../toast/contexto';
 
 function mensagemDe(erro: unknown): string {
   return erro instanceof ErroApi ? erro.message : 'Erro inesperado. Tente novamente.';
@@ -12,36 +12,45 @@ function mensagemDe(erro: unknown): string {
 
 interface PropsItem {
   reserva: Reserva;
-  podeCancelar: boolean;
   aoCancelar(reserva: Reserva): void;
 }
 
-function ItemReserva({ reserva, podeCancelar, aoCancelar }: PropsItem) {
+/** Reserva futura: barra lateral azul, dados e botão "Cancelar" em vermelho. */
+function ItemProxima({ reserva, aoCancelar }: PropsItem) {
   return (
-    <li
-      className={reserva.status === 'ATIVA' ? 'cartao item-lista' : 'cartao item-lista inativo'}
-      aria-label={`Reserva ${reserva.destino}`}
-    >
-      <div className="item-dados">
-        <div className="item-titulo">
+    <li className="reserva-proxima" aria-label={`Reserva ${reserva.destino}`}>
+      <div className="reserva-barra" aria-hidden="true" />
+      <div className="reserva-dados">
+        <div className="reserva-titulo">
           {dataComSemana(reserva.data)} · {ROTULO_TURNO[reserva.turno]}
-          {reserva.status === 'CANCELADA' && <span className="etiqueta">Cancelada</span>}
         </div>
-        <div className="item-subtitulo">
+        <div className="reserva-sub">
           {reserva.veiculo.modelo} · {reserva.veiculo.placa} — {reserva.destino}
         </div>
       </div>
-      {podeCancelar && (
-        <div className="acoes">
-          <button
-            type="button"
-            className="botao-borda botao-pequeno"
-            onClick={() => aoCancelar(reserva)}
-          >
-            Cancelar
-          </button>
+      <button type="button" className="botao-perigo-pequeno" onClick={() => aoCancelar(reserva)}>
+        Cancelar
+      </button>
+    </li>
+  );
+}
+
+/** Reserva anterior ou cancelada: só leitura, com situação à direita. */
+function ItemAnterior({ reserva }: { reserva: Reserva }) {
+  const cancelada = reserva.status === 'CANCELADA';
+  return (
+    <li className="reserva-anterior">
+      <div className="reserva-dados">
+        <div className="reserva-titulo">
+          {dataComSemana(reserva.data)} · {ROTULO_TURNO[reserva.turno]}
         </div>
-      )}
+        <div className="reserva-sub">
+          {reserva.veiculo.modelo} · {reserva.veiculo.placa} — {reserva.destino}
+        </div>
+      </div>
+      <span className={cancelada ? 'reserva-status cancelada' : 'reserva-status'}>
+        {cancelada ? 'Cancelada' : 'Concluída'}
+      </span>
     </li>
   );
 }
@@ -120,9 +129,9 @@ export function MinhasReservas() {
         ) : proximas.length === 0 ? (
           <div className="vazio">Você não tem reservas futuras.</div>
         ) : (
-          <ul className="lista-itens">
+          <ul className="lista-reservas">
             {proximas.map((r) => (
-              <ItemReserva key={r.id} reserva={r} podeCancelar aoCancelar={cancelar} />
+              <ItemProxima key={r.id} reserva={r} aoCancelar={cancelar} />
             ))}
           </ul>
         )}
@@ -131,9 +140,9 @@ export function MinhasReservas() {
       {anteriores.length > 0 && (
         <section className="pilha-curta">
           <h2 className="rotulo-lista">Anteriores</h2>
-          <ul className="lista-itens">
+          <ul className="lista-reservas">
             {anteriores.map((r) => (
-              <ItemReserva key={r.id} reserva={r} podeCancelar={false} aoCancelar={cancelar} />
+              <ItemAnterior key={r.id} reserva={r} />
             ))}
           </ul>
         </section>

@@ -127,4 +127,48 @@ describe('GET /agenda', () => {
     expect(resposta.status).toBe(200);
     expect(resposta.body.reservas).toEqual([]);
   });
+
+  it('devolve os veículos ativos mesmo sem reserva, e esconde o desativado sem reserva', async () => {
+    const { agente } = await entrarLogado();
+    await prisma.veiculo.create({ data: { placa: 'AAA1A11', modelo: 'Fiat Argo' } });
+    await prisma.veiculo.create({ data: { placa: 'BBB2B22', modelo: 'Onix', ativo: false } });
+
+    const resposta = await agente.get('/api/v1/agenda').query({ inicio: DAQUI_5, fim: DAQUI_6 });
+    expect(resposta.status).toBe(200);
+    expect(resposta.body.veiculos).toEqual([
+      { id: expect.any(Number), placa: 'AAA1A11', modelo: 'Fiat Argo' },
+    ]);
+  });
+
+  it('mantém na grade o veículo desativado que tem reserva na janela', async () => {
+    const { agente, usuario } = await entrarLogado();
+    const desativado = await prisma.veiculo.create({
+      data: { placa: 'BBB2B22', modelo: 'Onix', ativo: false },
+    });
+    await prisma.reserva.create({
+      data: {
+        veiculoId: desativado.id,
+        usuarioId: usuario.id,
+        data: paraDataBanco(DAQUI_5),
+        turno: 'MATUTINO',
+        destino: 'Escola A',
+      },
+    });
+
+    const resposta = await agente.get('/api/v1/agenda').query({ inicio: DAQUI_5, fim: DAQUI_6 });
+    expect(resposta.body.veiculos.map((v: { placa: string }) => v.placa)).toEqual(['BBB2B22']);
+  });
+
+  it('devolve os feriados da janela e ignora os de fora', async () => {
+    const { agente } = await entrarLogado();
+    await prisma.feriado.createMany({
+      data: [
+        { data: paraDataBanco(DAQUI_6), descricao: 'Dentro', abrangencia: 'MUNICIPAL' },
+        { data: paraDataBanco(DAQUI_12), descricao: 'Fora', abrangencia: 'NACIONAL' },
+      ],
+    });
+
+    const resposta = await agente.get('/api/v1/agenda').query({ inicio: DAQUI_5, fim: DAQUI_6 });
+    expect(resposta.body.feriados).toEqual([{ data: DAQUI_6, descricao: 'Dentro' }]);
+  });
 });
