@@ -19,7 +19,7 @@ interface PropsForm {
   aoCancelar?(): void;
 }
 
-/** Nome, e-mail, CPF e perfil, no cadastro e na edição. */
+/** Formulário de cadastro/edição (nome, e-mail, CPF e perfil). */
 function FormUsuario({ inicial, textoBotao, aoSalvar, aoCancelar }: PropsForm) {
   const [nome, setNome] = useState(inicial?.nome ?? '');
   const [email, setEmail] = useState(inicial?.email ?? '');
@@ -59,70 +59,60 @@ function FormUsuario({ inicial, textoBotao, aoSalvar, aoCancelar }: PropsForm) {
   }
 
   return (
-    <form className="pilha" onSubmit={enviar} noValidate>
-      <div className="form-grade">
-        <label className="rotulo">
-          Nome
-          <input
-            className="campo"
-            type="text"
-            autoComplete="off"
-            value={nome}
-            onChange={(e) => setNome(e.target.value)}
-          />
-        </label>
-        <label className="rotulo">
-          E-mail
-          <input
-            className="campo"
-            type="email"
-            autoComplete="off"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </label>
-        <label className="rotulo">
-          CPF
-          <input
-            className="campo"
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            placeholder="000.000.000-00"
-            value={cpf}
-            onChange={(e) => setCpf(e.target.value)}
-          />
-        </label>
-        <label className="rotulo">
-          Perfil
-          <select
-            className="campo"
-            value={perfil}
-            onChange={(e) => setPerfil(e.target.value as UsuarioEntrada['perfil'])}
-          >
-            {PERFIS.map((p) => (
-              <option key={p} value={p}>
-                {ROTULO_PERFIL[p]}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+    <form className="form-usuario" onSubmit={enviar} noValidate>
+      <input
+        className="campo"
+        type="text"
+        placeholder="Nome completo"
+        aria-label="Nome"
+        autoComplete="off"
+        value={nome}
+        onChange={(e) => setNome(e.target.value)}
+      />
+      <input
+        className="campo"
+        type="email"
+        placeholder="E-mail"
+        aria-label="E-mail"
+        autoComplete="off"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
+      <input
+        className="campo"
+        type="text"
+        inputMode="numeric"
+        placeholder="CPF (000.000.000-00)"
+        aria-label="CPF"
+        autoComplete="off"
+        value={cpf}
+        onChange={(e) => setCpf(e.target.value)}
+      />
+      <select
+        className="campo"
+        aria-label="Perfil"
+        value={perfil}
+        onChange={(e) => setPerfil(e.target.value as UsuarioEntrada['perfil'])}
+      >
+        {PERFIS.map((p) => (
+          <option key={p} value={p}>
+            {ROTULO_PERFIL[p]}
+          </option>
+        ))}
+      </select>
+      <button type="submit" className="botao-salvar" disabled={enviando}>
+        {enviando ? 'Salvando…' : textoBotao}
+      </button>
+      {aoCancelar && (
+        <button type="button" className="botao-link" onClick={aoCancelar}>
+          Cancelar
+        </button>
+      )}
       {erro && (
-        <p className="erro" role="alert">
+        <p className="erro erro-form" role="alert">
           {erro}
         </p>
       )}
-      <div className="acoes">
-        <button type="submit" className="botao" disabled={enviando}>
-          {enviando ? 'Salvando…' : textoBotao}
-        </button>
-        {aoCancelar && (
-          <button type="button" className="botao-link" onClick={aoCancelar}>
-            Cancelar
-          </button>
-        )}
-      </div>
     </form>
   );
 }
@@ -133,6 +123,7 @@ export function Usuarios() {
   const [usuarios, setUsuarios] = useState<Usuario[] | undefined>(undefined);
   const [erroCarga, setErroCarga] = useState<string | null>(null);
   const [editando, setEditando] = useState<number | null>(null);
+  const [cadastrando, setCadastrando] = useState(false);
   const [busca, setBusca] = useState('');
   const [provisoria, setProvisoria] = useState<{ nome: string; senha: string } | null>(null);
 
@@ -193,7 +184,16 @@ export function Usuarios() {
 
   return (
     <div className="pagina pagina-media">
-      <h1 className="titulo-pagina">Usuários</h1>
+      <div className="pagina-topo">
+        <h1 className="titulo-pagina">Usuários</h1>
+        <button
+          type="button"
+          className="botao botao-cadastrar"
+          onClick={() => setCadastrando((v) => !v)}
+        >
+          {cadastrando ? 'Fechar' : '+ Cadastrar usuário'}
+        </button>
+      </div>
 
       {provisoria && (
         <div className="destaque-senha" role="status">
@@ -208,105 +208,102 @@ export function Usuarios() {
         </div>
       )}
 
-      <section className="cartao pilha" aria-labelledby="titulo-novo-usuario">
-        <h2 id="titulo-novo-usuario" className="titulo-cartao-pequeno">
-          Novo usuário
-        </h2>
-        <FormUsuario
-          textoBotao="Cadastrar"
-          aoSalvar={(usuario, senha) => {
-            setUsuarios((lista) => [usuario, ...(lista ?? [])]);
-            if (senha) setProvisoria({ nome: usuario.nome, senha });
-            toast('Usuário cadastrado.');
-          }}
-        />
-      </section>
-
-      <section className="pilha-curta">
-        <div className="pagina-topo">
-          <h2 className="rotulo-lista">Cadastrados</h2>
-          <input
-            className="campo campo-busca"
-            type="search"
-            placeholder="Buscar por nome, e-mail ou CPF"
-            aria-label="Buscar usuário"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
+      {cadastrando && (
+        <div className="cartao-form">
+          <FormUsuario
+            textoBotao="Salvar"
+            aoSalvar={(usuario, senha) => {
+              setUsuarios((lista) => [usuario, ...(lista ?? [])]);
+              if (senha) setProvisoria({ nome: usuario.nome, senha });
+              setCadastrando(false);
+              toast('Usuário cadastrado.');
+            }}
+            aoCancelar={() => setCadastrando(false)}
           />
         </div>
-        {erroCarga ? (
-          <p className="erro" role="alert">
-            {erroCarga}
-          </p>
-        ) : usuarios === undefined ? (
-          <div className="vazio" role="status">
-            Carregando…
-          </div>
-        ) : usuarios.length === 0 ? (
-          <div className="vazio">Nenhum usuário cadastrado.</div>
-        ) : filtrados && filtrados.length === 0 ? (
-          <div className="vazio">Nenhum usuário encontrado para “{busca}”.</div>
-        ) : (
-          <ul className="lista-itens">
-            {filtrados?.map((usuario) =>
-              editando === usuario.id ? (
-                <li key={usuario.id} className="cartao" aria-label={`Editar ${usuario.nome}`}>
-                  <FormUsuario
-                    inicial={usuario}
-                    textoBotao="Salvar"
-                    aoSalvar={(editado) => {
-                      substituir(editado);
-                      setEditando(null);
-                      toast('Usuário atualizado.');
-                    }}
-                    aoCancelar={() => setEditando(null)}
-                  />
-                </li>
-              ) : (
-                <li
-                  key={usuario.id}
-                  className={usuario.ativo ? 'cartao item-lista' : 'cartao item-lista inativo'}
-                  aria-label={usuario.nome}
-                >
-                  <div className="item-dados">
-                    <div className="item-titulo">
-                      {usuario.nome}
-                      <span className="etiqueta-perfil">{ROTULO_PERFIL[usuario.perfil]}</span>
-                      {!usuario.ativo && <span className="etiqueta">Desativado</span>}
-                    </div>
-                    <div className="item-subtitulo">
-                      {usuario.email} · {mascararCpf(usuario.cpf)}
-                    </div>
+      )}
+
+      <input
+        className="campo campo-busca"
+        type="search"
+        placeholder="Buscar por nome, e-mail ou CPF"
+        aria-label="Buscar usuário"
+        value={busca}
+        onChange={(e) => setBusca(e.target.value)}
+      />
+
+      {erroCarga ? (
+        <p className="erro" role="alert">
+          {erroCarga}
+        </p>
+      ) : usuarios === undefined ? (
+        <div className="vazio" role="status">
+          Carregando…
+        </div>
+      ) : usuarios.length === 0 ? (
+        <div className="vazio">Nenhum usuário cadastrado.</div>
+      ) : filtrados && filtrados.length === 0 ? (
+        <div className="vazio">Nenhum usuário encontrado para “{busca}”.</div>
+      ) : (
+        <div className="lista-usuarios">
+          {filtrados?.map((usuario) =>
+            editando === usuario.id ? (
+              <div key={usuario.id} className="cartao-form" aria-label={`Editar ${usuario.nome}`}>
+                <FormUsuario
+                  inicial={usuario}
+                  textoBotao="Salvar"
+                  aoSalvar={(editado) => {
+                    substituir(editado);
+                    setEditando(null);
+                    toast('Usuário atualizado.');
+                  }}
+                  aoCancelar={() => setEditando(null)}
+                />
+              </div>
+            ) : (
+              <div
+                key={usuario.id}
+                className={usuario.ativo ? 'linha-usuario' : 'linha-usuario inativo'}
+                aria-label={usuario.nome}
+              >
+                <div className="usuario-nome-bloco">
+                  <div className="usuario-nome">{usuario.nome}</div>
+                  <div className="usuario-email">
+                    {usuario.email} · {mascararCpf(usuario.cpf)}
                   </div>
-                  <div className="acoes">
-                    <button
-                      type="button"
-                      className="botao-borda botao-pequeno"
-                      onClick={() => setEditando(usuario.id)}
-                    >
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      className="botao-borda botao-pequeno"
-                      onClick={() => void redefinirSenha(usuario)}
-                    >
-                      Redefinir senha
-                    </button>
-                    <button
-                      type="button"
-                      className="botao-borda botao-pequeno"
-                      onClick={() => void mudarSituacao(usuario)}
-                    >
-                      {usuario.ativo ? 'Desativar' : 'Reativar'}
-                    </button>
-                  </div>
-                </li>
-              ),
-            )}
-          </ul>
-        )}
-      </section>
+                </div>
+                <span className="usuario-perfil">{ROTULO_PERFIL[usuario.perfil]}</span>
+                <span className={usuario.ativo ? 'status-pill ativo' : 'status-pill inativo'}>
+                  {usuario.ativo ? 'Ativo' : 'Inativo'}
+                </span>
+                <div className="usuario-acoes">
+                  <button
+                    type="button"
+                    className="botao-borda botao-pequeno"
+                    onClick={() => setEditando(usuario.id)}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    className="botao-borda botao-pequeno"
+                    onClick={() => void redefinirSenha(usuario)}
+                  >
+                    Redefinir senha
+                  </button>
+                  <button
+                    type="button"
+                    className="botao-borda botao-pequeno"
+                    onClick={() => void mudarSituacao(usuario)}
+                  >
+                    {usuario.ativo ? 'Desativar' : 'Reativar'}
+                  </button>
+                </div>
+              </div>
+            ),
+          )}
+        </div>
+      )}
     </div>
   );
 }

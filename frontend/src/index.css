@@ -801,135 +801,380 @@ p {
   color: var(--texto-suave);
 }
 
-/* Agenda da frota */
+/* Agenda da frota (mockup): grade veículo × turno, chips, detalhe e lista por dia no celular */
 
-/* Colunas iguais com 120px de mínimo; se a semana não couber (tablet, notebook com zoom),
-   rola dentro do cartão em vez de esconder os últimos dias. O fundo "local" acompanha a
-   rolagem, porque são ele e o gap que desenham as linhas da grade. */
-.agenda-grade {
-  display: grid;
-  grid-template-columns: 110px repeat(7, minmax(120px, 1fr));
-  gap: 1px;
-  background: var(--borda);
-  background-attachment: local;
+.agenda-semana {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
   border: 1px solid var(--borda);
-  border-radius: 12px;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.agenda-semana-seta {
+  width: 40px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--azul-escuro);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.agenda-semana-seta:hover {
+  background: var(--azul-hover);
+}
+
+.agenda-semana-rotulo {
+  min-width: 120px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* Se a semana não couber (tablet, notebook com zoom), rola dentro do cartão em vez de
+   esconder os últimos dias. */
+.agenda-rolagem {
   overflow-x: auto;
-  overflow-y: hidden;
+  border: 1px solid var(--borda);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.agenda-grade {
+  min-width: 1008px;
+}
+
+.agenda-linha {
+  display: grid;
+  grid-template-columns: 168px repeat(7, minmax(120px, 1fr));
+  border-top: 1px solid var(--divisor);
+}
+
+.agenda-linha-topo {
+  border-top: none;
+  border-bottom: 1px solid var(--borda-campo);
+}
+
+/* Linha da manhã de cada veículo (menos o primeiro): separa um veículo do outro. */
+.agenda-linha-veiculo {
+  border-top: 1px solid var(--borda-campo);
 }
 
 .agenda-cabecalho {
-  background: #fff;
-  padding: 10px 8px;
+  padding: 10px 6px;
+  border-left: 1px solid var(--divisor);
   text-align: center;
+}
+
+.agenda-cabecalho.hoje {
+  background: #f2f6fd;
+  color: var(--azul);
+}
+
+.agenda-cabecalho.feriado {
+  background: #f6f6f8;
+}
+
+.agenda-cabecalho-dia {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.agenda-cabecalho-feriado {
+  min-height: 13px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--vermelho);
+}
+
+.agenda-rotulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 10px 8px 12px;
+}
+
+.agenda-rotulo-veiculo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.agenda-veiculo-nome {
+  font-size: 14px;
+  font-weight: 800;
+  overflow-wrap: break-word;
+}
+
+.agenda-veiculo-placa {
+  font-size: 11px;
+  color: var(--texto-apagado);
+}
+
+.agenda-rotulo-turno {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+.agenda-celula {
+  position: relative;
+  min-height: 48px;
+  padding: 6px;
+  border-left: 1px solid var(--divisor);
+}
+
+.agenda-celula.hoje {
+  background: #fafbfe;
+}
+
+.agenda-celula.feriado {
+  background: #f6f6f8;
+}
+
+.agenda-chip {
+  width: 100%;
+  height: 34px;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid #b9cbee;
+  border-radius: 8px;
+  background: var(--azul-selecao);
+  color: var(--azul-escuro);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.agenda-chip.minha {
+  border-color: var(--azul);
+  background: var(--azul);
+  color: #fff;
+}
+
+.agenda-livre {
+  width: 100%;
+  height: 34px;
+  border: 1px dashed transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: transparent;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.agenda-livre:hover,
+.agenda-livre:focus-visible {
+  border-color: #b9cbee;
+  background: #f5f8fe;
+  color: var(--azul);
+}
+
+.agenda-vazia {
+  margin: 12px;
+}
+
+.agenda-popover {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--borda-campo);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(22, 27, 61, 0.16);
+}
+
+.agenda-popover-titulo {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.agenda-popover-destino {
   font-size: 13px;
   color: var(--texto-medio);
 }
 
-.agenda-cabecalho.hoje {
-  background: var(--azul-selecao);
-  color: var(--azul-escuro);
-}
-
-.agenda-cabecalho-dia {
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 11px;
-}
-
-.agenda-cabecalho-data {
-  margin-top: 2px;
-  font-size: 15px;
-  font-weight: 800;
-  color: var(--texto);
-}
-
-.agenda-rotulo-turno {
-  background: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px 6px;
+.agenda-popover-veiculo {
   font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--texto-medio);
+  color: var(--texto-apagado);
 }
 
-.agenda-celula {
-  background: #fff;
-  min-height: 90px;
-  padding: 8px;
-}
-
-.agenda-celula.vazia {
-  background: var(--fundo);
-}
-
-.agenda-lista {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.agenda-reserva {
-  background: var(--azul-selecao);
-  border-left: 3px solid var(--azul);
-  border-radius: 6px;
-  padding: 6px 8px;
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.agenda-reserva-veiculo {
-  font-weight: 700;
-  color: var(--azul-escuro);
-}
-
-.agenda-reserva-dados {
-  margin-top: 2px;
+.agenda-legenda {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  color: var(--texto-medio);
+  gap: 22px;
+  margin-top: 18px;
+  font-size: 13px;
+  color: var(--texto-suave);
 }
 
-.agenda-lista-dias {
+.agenda-legenda-item {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.agenda-dia-cartao {
-  background: #fff;
-  border: 1px solid var(--borda);
-  border-radius: 12px;
-  padding: 14px 14px 10px;
-  display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
 }
 
-.agenda-dia-titulo {
-  font-size: 15px;
-  font-weight: 800;
-  color: var(--texto);
-  margin: 0;
+.agenda-legenda-cor {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
 }
 
-.agenda-dia-titulo.hoje {
+.agenda-legenda-cor.minha {
+  background: var(--azul);
+}
+
+.agenda-legenda-cor.outros {
+  border: 1px solid #b9cbee;
+  background: var(--azul-selecao);
+}
+
+.agenda-legenda-cor.livre {
+  border: 1px solid var(--borda);
+  background: #fff;
+}
+
+/* Celular: seletor de dia e um cartão por veículo, com manhã e tarde */
+
+.agenda-dias-movel {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.agenda-dia-botao {
+  min-height: 50px;
+  padding: 7px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--texto);
+  cursor: pointer;
+}
+
+.agenda-dia-botao.feriado {
+  color: var(--vermelho);
+}
+
+.agenda-dia-botao.ativo {
+  border-color: var(--azul);
+  background: var(--azul);
+  color: #fff;
+}
+
+.agenda-dia-dow {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.agenda-dia-num {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.agenda-feriado-aviso {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vermelho);
+}
+
+.agenda-veiculo-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--borda);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.agenda-veiculo-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agenda-veiculo-topo .agenda-veiculo-nome {
+  font-size: 15px;
+}
+
+.agenda-veiculo-sub {
+  font-size: 12px;
+  color: var(--texto-apagado);
+}
+
+.agenda-faixa {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding-top: 8px;
+  border-top: 1px solid var(--divisor);
+}
+
+.agenda-faixa-turno {
+  width: 52px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+.agenda-faixa-reserva {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--azul-selecao);
   color: var(--azul-escuro);
 }
 
-.agenda-dia-turno {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.agenda-faixa-reserva.minha {
+  background: var(--azul);
+  color: #fff;
+}
+
+.agenda-faixa-nome {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.agenda-faixa-destino {
+  font-size: 12px;
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}
+
+.agenda-faixa-livre {
+  flex: 1;
+  height: 40px;
+  border: 1px dashed #b9cbee;
+  border-radius: 8px;
+  background: #f5f8fe;
+  color: var(--azul);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.agenda-faixa-fechada {
+  flex: 1;
+  font-size: 13px;
+  color: var(--texto-apagado);
 }
 
 .etiqueta-aviso {
@@ -1099,6 +1344,471 @@ p {
   .form-grade {
     grid-template-columns: 1fr;
   }
+}
+
+/* Minhas reservas (mockup): cartão com barra azul e botão de cancelar vermelho */
+
+.lista-reservas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reserva-proxima,
+.reserva-anterior {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--borda);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+.reserva-proxima {
+  background: #fff;
+}
+
+.reserva-anterior {
+  background: #eeeff3;
+  color: #6b7090;
+}
+
+.reserva-barra {
+  align-self: stretch;
+  width: 4px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: var(--azul-claro);
+}
+
+.reserva-dados {
+  flex: 1;
+  min-width: 0;
+}
+
+.reserva-titulo {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.reserva-sub {
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--texto-suave);
+  overflow-wrap: anywhere;
+}
+
+.reserva-anterior .reserva-sub {
+  color: inherit;
+}
+
+.reserva-status {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.reserva-status.cancelada {
+  color: var(--vermelho);
+}
+
+.botao-perigo-pequeno {
+  flex-shrink: 0;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--vermelho-borda);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--vermelho);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.botao-perigo-pequeno:hover {
+  background: var(--vermelho-fundo);
+}
+
+/* Nova reserva (mockup): passos, datas em grade, turnos, veículos e confirmação */
+
+.passos-barra {
+  display: flex;
+  gap: 8px;
+}
+
+.passo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.passo-barra {
+  height: 4px;
+  border-radius: 4px;
+  background: #dde0e9;
+}
+
+.passo-barra.ativa {
+  background: var(--azul);
+}
+
+.passo-rotulo {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texto-apagado);
+}
+
+.passo-rotulo.ativo {
+  color: var(--azul-escuro);
+}
+
+.grid-datas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(68px, 1fr));
+  gap: 8px;
+}
+
+.botao-data {
+  min-height: 60px;
+  padding: 9px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--texto);
+  cursor: pointer;
+}
+
+.botao-data.ativo {
+  border-color: var(--azul);
+  background: var(--azul);
+  color: #fff;
+}
+
+.botao-data-dow {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.botao-data-dm {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.segmentado-turno {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.turno-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--texto);
+  text-align: left;
+  cursor: pointer;
+}
+
+.turno-cartao.ativo {
+  border-color: var(--azul);
+  background: var(--azul);
+  color: #fff;
+}
+
+.turno-nome {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.turno-horario {
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.selecao-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.selecao-rotulo {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.escolha-livre,
+.escolha-indisponivel {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  text-align: left;
+  font-size: 15px;
+}
+
+.escolha-livre {
+  border: 1.5px solid var(--borda);
+  background: #fff;
+  color: var(--texto);
+  cursor: pointer;
+}
+
+.escolha-livre.ativa {
+  border-color: var(--azul);
+  background: #f2f6fd;
+}
+
+.escolha-indisponivel {
+  border: 1.5px dashed var(--borda-campo);
+  background: #eeeff3;
+  color: var(--texto-apagado);
+}
+
+.escolha-nome {
+  flex: 1;
+}
+
+.radio-circulo {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #b8bdd0;
+  border-radius: 50%;
+}
+
+.escolha-livre.ativa .radio-circulo {
+  border-color: var(--azul);
+}
+
+.radio-ponto {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--azul);
+}
+
+.escolha-indisponivel .radio-circulo {
+  border-color: var(--borda-campo);
+}
+
+.cartao-confirmacao {
+  border: 1px solid var(--borda);
+  border-radius: 16px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.cartao-confirmacao-topo {
+  padding: 18px 20px;
+  background: var(--azul);
+  color: #fff;
+}
+
+.cartao-confirmacao-rotulo {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.cartao-confirmacao-titulo {
+  margin-top: 2px;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.cartao-confirmacao-corpo {
+  padding: 6px 20px;
+}
+
+.cartao-confirmacao-corpo .resumo-linha {
+  padding: 14px 0;
+}
+
+.cartao-confirmacao-corpo .resumo-linha:last-child {
+  padding-bottom: 14px;
+}
+
+.acoes-confirmar {
+  display: flex;
+  gap: 10px;
+}
+
+.botao-voltar {
+  flex: 1;
+  color: var(--azul-escuro);
+}
+
+.botao-confirmar {
+  flex: 2;
+  height: 52px;
+  border: none;
+  border-radius: 12px;
+  background: #3e9b4f;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.botao-confirmar:hover:not(:disabled) {
+  background: #348543;
+}
+
+.botao-confirmar:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* Usuários (mockup): lista em linhas, formulário que abre no topo e status em pílula */
+
+.botao-cadastrar {
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.cartao-form {
+  padding: 16px;
+  border: 1px solid var(--borda);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.form-usuario {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.form-usuario .campo {
+  flex: 1 1 180px;
+  height: 44px;
+  font-size: 14px;
+}
+
+.botao-salvar {
+  height: 44px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 10px;
+  background: #3e9b4f;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.botao-salvar:hover:not(:disabled) {
+  background: #348543;
+}
+
+.botao-salvar:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.erro-form {
+  flex-basis: 100%;
+}
+
+.pagina-media > .campo-busca {
+  width: 100%;
+}
+
+.lista-usuarios {
+  border: 1px solid var(--borda);
+  border-radius: 14px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.linha-usuario {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--divisor);
+}
+
+.linha-usuario:first-child {
+  border-top: none;
+}
+
+.linha-usuario.inativo {
+  opacity: 0.6;
+}
+
+.usuario-nome-bloco {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.usuario-nome {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.usuario-email {
+  font-size: 12px;
+  color: var(--texto-suave);
+  overflow-wrap: anywhere;
+}
+
+.usuario-perfil {
+  width: 100px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texto-medio);
+}
+
+.status-pill {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-pill.ativo {
+  background: #e5f3e7;
+  color: #2d7a3b;
+}
+
+.status-pill.inativo {
+  background: #eeeff3;
+  color: #6b7090;
+}
+
+.usuario-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
 }
 
 .toast {
