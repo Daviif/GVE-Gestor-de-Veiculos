@@ -7,6 +7,7 @@ import { itensAdmin } from './componentes/navegacao';
 import { Agenda } from './paginas/Agenda';
 import { Feriados } from './paginas/admin/Feriados';
 import { Usuarios } from './paginas/admin/Usuarios';
+import { Veiculos } from './paginas/admin/Veiculos';
 import { EmConstrucao } from './paginas/EmConstrucao';
 import { Login } from './paginas/Login';
 import { MinhaConta } from './paginas/MinhaConta';
@@ -18,6 +19,7 @@ import { ProvedorToast } from './toast/ProvedorToast';
 /** Telas da administração já prontas; as demais abrem "Em construção". */
 const telasAdmin: Partial<Record<(typeof itensAdmin)[number]['caminho'], ReactNode>> = {
   '/admin/usuarios': <Usuarios />,
+  '/admin/veiculos': <Veiculos />,
   '/admin/feriados': <Feriados />,
 };
 

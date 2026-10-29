@@ -1163,3 +1163,258 @@ p {
     bottom: 92px;
   }
 }
+
+/* Veículos (admin): cartões em grade, formulário que abre no topo e confirmação da desativação */
+
+.pagina-veiculos {
+  max-width: 900px;
+}
+
+.botao-cadastrar-veiculo {
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.veiculo-cartao-form {
+  padding: 16px;
+  border: 1px solid var(--borda);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.form-veiculo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.form-veiculo .campo {
+  flex: 2 1 200px;
+  height: 44px;
+  font-size: 14px;
+}
+
+.form-veiculo .campo-placa {
+  flex: 1 1 120px;
+  text-transform: uppercase;
+}
+
+.veiculo-salvar {
+  height: 44px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 10px;
+  background: #3e9b4f;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.veiculo-salvar:hover:not(:disabled) {
+  background: #348543;
+}
+
+.veiculo-salvar:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.form-veiculo-erro {
+  flex-basis: 100%;
+}
+
+.grade-veiculos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.veiculo-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--borda);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.veiculo-cartao.inativo {
+  opacity: 0.6;
+}
+
+.veiculo-edicao {
+  grid-column: 1 / -1;
+}
+
+.veiculo-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.veiculo-modelo {
+  font-size: 15px;
+  font-weight: 800;
+  overflow-wrap: break-word;
+}
+
+.veiculo-situacao {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: #eeeff3;
+  color: #6b7090;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.veiculo-situacao.ativo {
+  background: #e5f3e7;
+  color: #2d7a3b;
+}
+
+.veiculo-placa {
+  align-self: flex-start;
+  padding: 3px 10px;
+  border: 2px solid var(--texto);
+  border-radius: 6px;
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.veiculo-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--divisor);
+}
+
+.veiculo-uso {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+.veiculo-acoes {
+  display: flex;
+  gap: 6px;
+}
+
+.modal-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(22, 27, 61, 0.45);
+}
+
+.modal {
+  width: 100%;
+  max-width: 520px;
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  overflow-y: auto;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 20px 50px rgba(22, 27, 61, 0.3);
+}
+
+.modal-titulo {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--azul-escuro);
+}
+
+.modal-texto {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--texto-medio);
+}
+
+.modal-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.modal-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--divisor);
+}
+
+.modal-item:first-child {
+  border-top: none;
+}
+
+.modal-item-quando {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.modal-item-quem {
+  font-size: 13px;
+  color: var(--texto-suave);
+  overflow-wrap: anywhere;
+}
+
+.modal-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.modal-acoes .botao-borda {
+  height: 50px;
+  padding: 0 22px;
+  font-size: 15px;
+}
+
+.botao-perigo-cheio {
+  height: 50px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 12px;
+  background: var(--vermelho);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.botao-perigo-cheio:hover:not(:disabled) {
+  background: #962b25;
+}
+
+.botao-perigo-cheio:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
