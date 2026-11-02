@@ -1,6 +1,7 @@
 import { mascararCpf, PERFIS, usuarioSchema, type Usuario, type UsuarioEntrada } from '@gve/shared';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { api, ErroApi } from '../../api';
+import { useErrosDeCampo } from '../../componentes/errosDeCampo';
 import { useToast } from '../../toast/contexto';
 
 const ROTULO_PERFIL: Record<(typeof PERFIS)[number], string> = {
@@ -27,14 +28,17 @@ function FormUsuario({ inicial, textoBotao, aoSalvar, aoCancelar }: PropsForm) {
   const [perfil, setPerfil] = useState<UsuarioEntrada['perfil']>(inicial?.perfil ?? 'SERVIDOR');
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const campos = useErrosDeCampo();
 
-  async function enviar(evento: FormEvent) {
+  async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
+    const form = evento.currentTarget;
     setErro(null);
+    campos.limpar();
 
     const validacao = usuarioSchema.safeParse({ nome, email, cpf, perfil });
     if (!validacao.success) {
-      setErro(validacao.error.issues[0]?.message ?? 'Dados inválidos.');
+      campos.deValidacao(form, validacao.error);
       return;
     }
 
@@ -52,7 +56,7 @@ function FormUsuario({ inicial, textoBotao, aoSalvar, aoCancelar }: PropsForm) {
       }
       aoSalvar(r.usuario, r.senhaProvisoria);
     } catch (e) {
-      setErro(mensagemDe(e));
+      if (!campos.deApi(form, e)) setErro(mensagemDe(e));
     } finally {
       setEnviando(false);
     }
@@ -60,46 +64,62 @@ function FormUsuario({ inicial, textoBotao, aoSalvar, aoCancelar }: PropsForm) {
 
   return (
     <form className="form-usuario" onSubmit={enviar} noValidate>
-      <input
-        className="campo"
-        type="text"
-        placeholder="Nome completo"
-        aria-label="Nome"
-        autoComplete="off"
-        value={nome}
-        onChange={(e) => setNome(e.target.value)}
-      />
-      <input
-        className="campo"
-        type="email"
-        placeholder="E-mail"
-        aria-label="E-mail"
-        autoComplete="off"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-      />
-      <input
-        className="campo"
-        type="text"
-        inputMode="numeric"
-        placeholder="CPF (000.000.000-00)"
-        aria-label="CPF"
-        autoComplete="off"
-        value={cpf}
-        onChange={(e) => setCpf(e.target.value)}
-      />
-      <select
-        className="campo"
-        aria-label="Perfil"
-        value={perfil}
-        onChange={(e) => setPerfil(e.target.value as UsuarioEntrada['perfil'])}
-      >
-        {PERFIS.map((p) => (
-          <option key={p} value={p}>
-            {ROTULO_PERFIL[p]}
-          </option>
-        ))}
-      </select>
+      <div className="campo-grupo">
+        <input
+          className="campo"
+          type="text"
+          placeholder="Nome completo"
+          aria-label="Nome"
+          autoComplete="off"
+          value={nome}
+          {...campos.props('nome')}
+          onChange={(e) => setNome(e.target.value)}
+        />
+        {campos.mensagem('nome')}
+      </div>
+      <div className="campo-grupo">
+        <input
+          className="campo"
+          type="email"
+          placeholder="E-mail"
+          aria-label="E-mail"
+          autoComplete="off"
+          value={email}
+          {...campos.props('email')}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+        {campos.mensagem('email')}
+      </div>
+      <div className="campo-grupo">
+        <input
+          className="campo"
+          type="text"
+          inputMode="numeric"
+          placeholder="CPF (000.000.000-00)"
+          aria-label="CPF"
+          autoComplete="off"
+          value={cpf}
+          {...campos.props('cpf')}
+          onChange={(e) => setCpf(e.target.value)}
+        />
+        {campos.mensagem('cpf')}
+      </div>
+      <div className="campo-grupo">
+        <select
+          className="campo"
+          aria-label="Perfil"
+          value={perfil}
+          {...campos.props('perfil')}
+          onChange={(e) => setPerfil(e.target.value as UsuarioEntrada['perfil'])}
+        >
+          {PERFIS.map((p) => (
+            <option key={p} value={p}>
+              {ROTULO_PERFIL[p]}
+            </option>
+          ))}
+        </select>
+        {campos.mensagem('perfil')}
+      </div>
       <button type="submit" className="botao-salvar" disabled={enviando}>
         {enviando ? 'Salvando…' : textoBotao}
       </button>

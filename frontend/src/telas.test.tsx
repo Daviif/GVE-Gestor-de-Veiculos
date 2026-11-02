@@ -356,7 +356,12 @@ describe('Usuários (administração)', () => {
     preencher('CPF', '111.111.111-11');
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
 
-    expect((await screen.findByRole('alert')).textContent).toContain('CPF inválido');
+    // O erro aparece ao lado do campo, que recebe o foco (validação por campo, #19).
+    const campo = screen.getByLabelText('CPF');
+    await waitFor(() => expect(campo.getAttribute('aria-invalid')).toBe('true'));
+    const mensagem = document.getElementById(campo.getAttribute('aria-describedby') ?? '');
+    expect(mensagem?.textContent).toContain('CPF inválido');
+    expect(document.activeElement).toBe(campo);
     expect(fetch.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
   });
 

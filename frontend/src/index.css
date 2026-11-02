@@ -107,6 +107,27 @@ p {
   box-shadow: 0 0 0 3px var(--foco);
 }
 
+/* Campo com erro ao lado: rótulo e campo, e a mensagem logo abaixo. */
+.campo-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.campo[aria-invalid='true'] {
+  border-color: var(--vermelho);
+}
+
+.campo[aria-invalid='true']:focus {
+  box-shadow: 0 0 0 3px var(--vermelho-fundo);
+}
+
+.erro-campo {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vermelho);
+}
+
 .botao {
   height: 48px;
   padding: 0 22px;
@@ -1193,6 +1214,7 @@ p {
 
 .form-linha {
   display: flex;
+  align-items: flex-start;
   gap: 10px;
   flex-wrap: wrap;
 }
@@ -1701,12 +1723,16 @@ p {
 .form-usuario {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  /* Topo: a mensagem de erro de um campo não desalinha os outros nem os botões. */
+  align-items: flex-start;
   gap: 10px;
 }
 
-.form-usuario .campo {
+.form-usuario > .campo-grupo {
   flex: 1 1 180px;
+}
+
+.form-usuario .campo {
   height: 44px;
   font-size: 14px;
 }
@@ -1809,6 +1835,116 @@ p {
   flex-wrap: wrap;
   gap: 6px;
   margin-left: auto;
+}
+
+/* Histórico (filtros + lista de reservas + paginação) */
+
+.pagina-historico {
+  max-width: 980px;
+}
+
+.filtros-historico {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.filtros-historico .campo {
+  flex: 1 1 160px;
+  height: 44px;
+}
+
+.historico-contagem {
+  font-size: 13px;
+  color: var(--texto-suave);
+}
+
+.aviso-erro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--vermelho-fundo);
+  border: 1px solid var(--vermelho-borda);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.aviso-erro .erro {
+  margin: 0;
+}
+
+.historico-lista {
+  background: #fff;
+  border: 1px solid var(--borda);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.historico-linha {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  border-top: 1px solid var(--divisor);
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.historico-linha:first-child {
+  border-top: none;
+}
+
+.historico-data {
+  width: 128px;
+  font-weight: 700;
+}
+
+.historico-turno {
+  width: 80px;
+  color: var(--texto-suave);
+}
+
+.historico-veic {
+  width: 160px;
+  font-weight: 600;
+}
+
+.historico-user {
+  width: 120px;
+}
+
+.historico-dest {
+  flex: 1 1 180px;
+  color: var(--texto-medio);
+  overflow-wrap: anywhere;
+}
+
+.historico-status {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.paginacao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 767.98px) {
+  .historico-linha {
+    gap: 6px;
+    padding: 10px 12px;
+  }
+  .historico-data,
+  .historico-turno,
+  .historico-veic,
+  .historico-user {
+    width: auto;
+  }
 }
 
 .toast {
