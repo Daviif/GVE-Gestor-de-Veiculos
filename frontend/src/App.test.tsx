@@ -187,10 +187,11 @@ describe('Usuários', () => {
     abrir('/admin/usuarios');
     await screen.findByText('Nenhum usuário cadastrado.');
 
+    fireEvent.click(screen.getByRole('button', { name: '+ Cadastrar usuário' }));
     preencher('Nome', 'Carlos Servidor');
     preencher('E-mail', 'carlos@gve.local');
     preencher('CPF', '529.982.247-25');
-    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
 
     expect(await erroDoCampo('CPF')).toBe('Já existe um usuário com esse CPF.');
     expect(document.activeElement).toBe(screen.getByLabelText('CPF'));
