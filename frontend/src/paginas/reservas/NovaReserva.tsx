@@ -1,4 +1,5 @@
 import {
+  errosPorCampo,
   novaReservaSchema,
   ROTULO_TURNO,
   TURNOS,
@@ -6,9 +7,10 @@ import {
   type Turno,
   type VeiculoDisponivel,
 } from '@gve/shared';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { api, ErroApi } from '../../api';
+import { useErrosDeCampo } from '../../componentes/errosDeCampo';
 import { useToast } from '../../toast/contexto';
 import { diaComSemana } from '../../datas';
 
@@ -23,6 +25,7 @@ export function NovaReserva() {
   const [passo, setPasso] = useState<1 | 2 | 3>(1);
   const [datas, setDatas] = useState<string[] | undefined>(undefined);
   const [erro, setErro] = useState<string | null>(null);
+  const campos = useErrosDeCampo();
 
   const [data, setData] = useState('');
   const [turno, setTurno] = useState<Turno | ''>('');
@@ -66,11 +69,18 @@ export function NovaReserva() {
     await carregarDisponibilidade();
   }
 
-  function irParaConfirmar() {
+  function irParaConfirmar(evento: MouseEvent<HTMLButtonElement>) {
     setErro(null);
+    campos.limpar();
     const validacao = novaReservaSchema.safeParse({ data, turno, veiculoId, destino });
     if (!validacao.success) {
-      setErro(validacao.error.issues[0]?.message ?? 'Dados inválidos.');
+      // Só o destino é campo de texto neste passo; data, turno e veículo ficam no aviso do topo.
+      const { destino: erroDestino } = errosPorCampo(validacao.error);
+      if (erroDestino) {
+        campos.mostrar(evento.currentTarget.closest('section'), { destino: erroDestino });
+      } else {
+        setErro(validacao.error.issues[0]?.message ?? 'Dados inválidos.');
+      }
       return;
     }
     setPasso(3);
@@ -204,17 +214,21 @@ export function NovaReserva() {
             )}
           </div>
 
-          <label className="rotulo">
-            Destino
-            <input
-              className="campo"
-              type="text"
-              maxLength={200}
-              placeholder="Ex.: Escola Municipal Santa Rita"
-              value={destino}
-              onChange={(e) => setDestino(e.target.value)}
-            />
-          </label>
+          <div className="campo-grupo">
+            <label className="rotulo">
+              Destino
+              <input
+                className="campo"
+                type="text"
+                maxLength={200}
+                placeholder="Ex.: Escola Municipal Santa Rita"
+                value={destino}
+                onChange={(e) => setDestino(e.target.value)}
+                {...campos.props('destino')}
+              />
+            </label>
+            {campos.mensagem('destino')}
+          </div>
 
           <div className="acoes">
             <button

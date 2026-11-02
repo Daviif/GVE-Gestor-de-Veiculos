@@ -2,6 +2,7 @@ import { trocaSenhaSchema, type UsuarioSessao } from '@gve/shared';
 import { useState, type FormEvent } from 'react';
 import { api, ErroApi } from '../api';
 import { useSessao } from '../auth/contexto';
+import { useErrosDeCampo } from './errosDeCampo';
 
 interface Props {
   /** Primeiro acesso: sem senha atual e com rótulos visíveis. */
@@ -18,20 +19,23 @@ export function FormSenha({ primeiroAcesso = false, textoBotao, aoConcluir }: Pr
   const [confirmacao, setConfirmacao] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const campos = useErrosDeCampo();
 
-  async function enviar(evento: FormEvent) {
+  async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
+    const form = evento.currentTarget;
     setErro(null);
+    campos.limpar();
 
     const validacao = trocaSenhaSchema.safeParse(
       primeiroAcesso ? { novaSenha } : { senhaAtual, novaSenha },
     );
     if (!validacao.success) {
-      setErro(validacao.error.issues[0]?.message ?? 'Dados inválidos.');
+      campos.deValidacao(form, validacao.error);
       return;
     }
     if (novaSenha !== confirmacao) {
-      setErro('As senhas não conferem.');
+      campos.mostrar(form, { confirmacao: 'As senhas não conferem.' });
       return;
     }
 
@@ -47,13 +51,16 @@ export function FormSenha({ primeiroAcesso = false, textoBotao, aoConcluir }: Pr
       setConfirmacao('');
       aoConcluir(r.usuario);
     } catch (e) {
-      setErro(e instanceof ErroApi ? e.message : 'Erro inesperado. Tente novamente.');
+      if (!campos.deApi(form, e)) {
+        setErro(e instanceof ErroApi ? e.message : 'Erro inesperado. Tente novamente.');
+      }
     } finally {
       setEnviando(false);
     }
   }
 
   const campo = (
+    nome: string,
     rotulo: string,
     valor: string,
     mudar: (v: string) => void,
@@ -69,23 +76,37 @@ export function FormSenha({ primeiroAcesso = false, textoBotao, aoConcluir }: Pr
         onChange={(e) => mudar(e.target.value)}
         placeholder={placeholder}
         aria-label={primeiroAcesso ? undefined : rotulo}
+        {...campos.props(nome)}
       />
     );
-    return primeiroAcesso ? (
-      <label className="rotulo">
-        {rotulo}
-        {input}
-      </label>
-    ) : (
-      input
+    return (
+      <div className="campo-grupo">
+        {primeiroAcesso ? (
+          <label className="rotulo">
+            {rotulo}
+            {input}
+          </label>
+        ) : (
+          input
+        )}
+        {campos.mensagem(nome)}
+      </div>
     );
   };
 
   return (
     <form className="pilha" onSubmit={enviar} noValidate>
       {!primeiroAcesso &&
-        campo('Senha atual', senhaAtual, setSenhaAtual, 'current-password', 'Senha atual')}
+        campo(
+          'senhaAtual',
+          'Senha atual',
+          senhaAtual,
+          setSenhaAtual,
+          'current-password',
+          'Senha atual',
+        )}
       {campo(
+        'novaSenha',
         'Nova senha',
         novaSenha,
         setNovaSenha,
@@ -93,6 +114,7 @@ export function FormSenha({ primeiroAcesso = false, textoBotao, aoConcluir }: Pr
         primeiroAcesso ? 'Mínimo de 8 caracteres' : 'Nova senha (mín. 8 caracteres)',
       )}
       {campo(
+        'confirmacao',
         'Confirmar nova senha',
         confirmacao,
         setConfirmacao,

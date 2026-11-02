@@ -1,5 +1,5 @@
 import type { UsuarioSessao } from '@gve/shared';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Rotas } from './App';
@@ -48,6 +48,14 @@ function abrir(caminho: string) {
 
 function preencher(rotulo: string, valor: string) {
   fireEvent.change(screen.getByLabelText(rotulo), { target: { value: valor } });
+}
+
+/** A mensagem mostrada ao lado do campo; confere que ele ficou marcado como inválido. */
+async function erroDoCampo(rotulo: string): Promise<string> {
+  const campo = screen.getByLabelText(rotulo);
+  await waitFor(() => expect(campo.getAttribute('aria-invalid')).toBe('true'));
+  const mensagem = document.getElementById(campo.getAttribute('aria-describedby') ?? '');
+  return mensagem?.textContent ?? '';
 }
 
 afterEach(() => {
@@ -103,7 +111,10 @@ describe('login', () => {
     const fetch = simularApi({ 'GET /auth/me': naoAutenticado });
     abrir('/entrar');
     fireEvent.click(await screen.findByRole('button', { name: 'Entrar' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('Informe o e-mail ou o CPF.');
+    expect(await erroDoCampo('E-mail ou CPF')).toBe('Informe o e-mail ou o CPF.');
+    expect(await erroDoCampo('Senha')).toBe('Informe a senha.');
+    // O foco vai para o primeiro campo com erro.
+    expect(document.activeElement).toBe(screen.getByLabelText('E-mail ou CPF'));
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
@@ -137,7 +148,8 @@ describe('troca de senha obrigatória', () => {
     preencher('Nova senha', 'nova-senha-456');
     preencher('Confirmar nova senha', 'outra-senha-789');
     fireEvent.click(screen.getByRole('button', { name: 'Salvar e continuar' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('As senhas não conferem.');
+    expect(await erroDoCampo('Confirmar nova senha')).toBe('As senhas não conferem.');
+    expect(screen.getByLabelText('Nova senha').getAttribute('aria-invalid')).toBeNull();
   });
 });
 
@@ -155,6 +167,34 @@ describe('rotas por perfil', () => {
     abrir('/admin/usuarios');
     expect(await screen.findByRole('heading', { name: 'Usuários' })).toBeTruthy();
     expect(screen.getAllByRole('link', { name: 'Veículos' }).length).toBeGreaterThan(0);
+  });
+});
+
+describe('Usuários', () => {
+  it('erro da API que aponta um campo aparece ao lado dele', async () => {
+    simularApi({
+      'GET /auth/me': () => json(200, { usuario: { ...servidora, perfil: 'ADMINISTRADOR' } }),
+      'GET /usuarios': () => json(200, { usuarios: [] }),
+      'POST /usuarios': () =>
+        json(409, {
+          erro: {
+            codigo: 'CPF_DUPLICADO',
+            mensagem: 'Já existe um usuário com esse CPF.',
+            campo: 'cpf',
+          },
+        }),
+    });
+    abrir('/admin/usuarios');
+    await screen.findByText('Nenhum usuário cadastrado.');
+
+    preencher('Nome', 'Carlos Servidor');
+    preencher('E-mail', 'carlos@gve.local');
+    preencher('CPF', '529.982.247-25');
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar' }));
+
+    expect(await erroDoCampo('CPF')).toBe('Já existe um usuário com esse CPF.');
+    expect(document.activeElement).toBe(screen.getByLabelText('CPF'));
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });
 
@@ -281,7 +321,8 @@ describe('Feriados', () => {
     await screen.findByText(/Nenhum feriado cadastrado/);
 
     fireEvent.click(screen.getByRole('button', { name: 'Cadastrar' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('Informe a data.');
+    expect(await erroDoCampo('Data')).toBe('Informe a data.');
+    expect(await erroDoCampo('Nome do feriado')).toBe('Informe o nome do feriado.');
     expect(fetch).not.toHaveBeenCalledWith('/api/v1/feriados', expect.anything());
   });
 

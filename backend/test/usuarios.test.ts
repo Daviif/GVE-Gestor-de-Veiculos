@@ -137,6 +137,7 @@ describe('POST /usuarios', () => {
     });
     expect(resposta.status).toBe(409);
     expect(resposta.body.erro.codigo).toBe('EMAIL_DUPLICADO');
+    expect(resposta.body.erro.campo).toBe('email');
   });
 
   it('recusa CPF repetido com 409', async () => {
@@ -149,6 +150,7 @@ describe('POST /usuarios', () => {
       .send({ nome: 'Outro', email: 'outro@gve.local', cpf: CPF_NOVO, perfil: 'SERVIDOR' });
     expect(resposta.status).toBe(409);
     expect(resposta.body.erro.codigo).toBe('CPF_DUPLICADO');
+    expect(resposta.body.erro.campo).toBe('cpf');
   });
 
   it('recusa CPF inválido com 400', async () => {

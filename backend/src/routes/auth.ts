@@ -218,12 +218,22 @@ rotasAuth.put('/senha', autenticar({ permitirTrocaPendente: true }), async (req,
 
   if (entrada.senhaAtual !== undefined) {
     if (!(await conferirSenha(usuario.senhaHash, entrada.senhaAtual))) {
-      throw new ErroApi(400, 'SENHA_ATUAL_INCORRETA', 'A senha atual está incorreta.');
+      throw new ErroApi(
+        400,
+        'SENHA_ATUAL_INCORRETA',
+        'A senha atual está incorreta.',
+        'senhaAtual',
+      );
     }
   } else if (usuario.trocaSenhaObrigatoria) {
     // Primeiro acesso: acabou de entrar com a senha temporária, que não pode ser reaproveitada.
     if (await conferirSenha(usuario.senhaHash, entrada.novaSenha)) {
-      throw new ErroApi(400, 'SENHA_REPETIDA', 'A nova senha deve ser diferente da temporária.');
+      throw new ErroApi(
+        400,
+        'SENHA_REPETIDA',
+        'A nova senha deve ser diferente da temporária.',
+        'novaSenha',
+      );
     }
   } else {
     throw new ErroApi(400, 'ENTRADA_INVALIDA', 'Informe a senha atual.');

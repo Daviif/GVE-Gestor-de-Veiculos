@@ -1,3 +1,5 @@
+import './idioma';
+
 export * from './erros';
 export * from './auth';
 export * from './feriados';

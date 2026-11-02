@@ -76,7 +76,7 @@ rotasFeriados.post('/', async (req, res) => {
       // Espera reservas em andamento nesta data: elas entram na contagem do aviso (RN11).
       await travarDatas(tx, [entrada.data]);
       if (await tx.feriado.findUnique({ where: { data }, select: { id: true } })) {
-        throw new ErroApi(409, 'FERIADO_DUPLICADO', 'Já existe um feriado nessa data.');
+        throw new ErroApi(409, 'FERIADO_DUPLICADO', 'Já existe um feriado nessa data.', 'data');
       }
       const criado = await tx.feriado.create({
         data: { ...entrada, data, criadoPorId: req.usuario!.id },
@@ -99,7 +99,7 @@ rotasFeriados.post('/', async (req, res) => {
   } catch (erro) {
     // Dois cadastros simultâneos na mesma data: o índice único do banco decide.
     if (erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === 'P2002') {
-      throw new ErroApi(409, 'FERIADO_DUPLICADO', 'Já existe um feriado nessa data.');
+      throw new ErroApi(409, 'FERIADO_DUPLICADO', 'Já existe um feriado nessa data.', 'data');
     }
     throw erro;
   }

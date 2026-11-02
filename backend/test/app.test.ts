@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { criarApp } from '../src/app';
 
 const app = criarApp();
@@ -27,4 +27,70 @@ describe('API', () => {
     expect(resposta.status).toBe(400);
     expect(resposta.body.erro.codigo).toBe('JSON_INVALIDO');
   });
+});
+
+describe('mensagens de validação', () => {
+  it('as genéricas do Zod também saem em português', async () => {
+    const resposta = await request(app).post('/api/v1/auth/login').send([1, 2]);
+    expect(resposta.status).toBe(400);
+    expect(resposta.body.erro.mensagem).toMatch(/^Entrada inválida: esperava um objeto/);
+  });
+
+  it('erro de validação aponta o campo; erro que não é de campo não aponta', async () => {
+    const vazio = await request(app).post('/api/v1/auth/login').send({ login: '', senha: 'x' });
+    expect(vazio.body.erro).toEqual({
+      codigo: 'ENTRADA_INVALIDA',
+      mensagem: 'Informe o e-mail ou o CPF.',
+      campo: 'login',
+    });
+
+    const naoEncontrada = await request(app).get('/api/v1/nao-existe');
+    expect(naoEncontrada.body.erro).not.toHaveProperty('campo');
+  });
+});
+
+describe('corpo que não dá para ler', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ['grande demais', 'application/json', {}, 413, 'CORPO_GRANDE_DEMAIS'],
+    [
+      'com charset que não é UTF-8',
+      'application/json; charset=latin9',
+      {},
+      415,
+      'FORMATO_NAO_SUPORTADO',
+    ],
+    [
+      'com compressão desconhecida',
+      'application/json',
+      { 'Content-Encoding': 'xpto' },
+      415,
+      'FORMATO_NAO_SUPORTADO',
+    ],
+    [
+      'com compressão corrompida',
+      'application/json',
+      { 'Content-Encoding': 'br' },
+      400,
+      'REQUISICAO_INVALIDA',
+    ],
+  ])(
+    '%s: responde 4xx em português, sem registrar erro no servidor',
+    async (caso, tipo, cabecalhos, status, codigo) => {
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const corpo = caso === 'grande demais' ? JSON.stringify({ x: 'a'.repeat(200_000) }) : '{}';
+
+      const resposta = await request(app)
+        .post('/api/v1/auth/login')
+        .set('Content-Type', tipo)
+        .set(cabecalhos)
+        .send(corpo);
+      expect(resposta.status).toBe(status);
+      expect(resposta.body.erro.codigo).toBe(codigo);
+      expect(log).not.toHaveBeenCalled();
+    },
+  );
 });

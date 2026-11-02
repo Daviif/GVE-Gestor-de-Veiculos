@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router';
 import { ErroApi } from '../api';
 import { useSessao } from '../auth/contexto';
+import { useErrosDeCampo } from '../componentes/errosDeCampo';
 import { Logo } from '../componentes/Logo';
 
 export function Login() {
@@ -13,18 +14,21 @@ export function Login() {
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const campos = useErrosDeCampo();
 
   const destino = (local.state as { de?: string } | null)?.de ?? '/';
 
   if (usuario && !enviando) return <Navigate to={destino} replace />;
 
-  async function enviar(evento: FormEvent) {
+  async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
+    const form = evento.currentTarget;
     setErro(null);
+    campos.limpar();
 
     const validacao = loginSchema.safeParse({ login, senha });
     if (!validacao.success) {
-      setErro(validacao.error.issues[0]?.message ?? 'Dados inválidos.');
+      campos.deValidacao(form, validacao.error);
       return;
     }
 
@@ -33,7 +37,10 @@ export function Login() {
       const u = await entrar(validacao.data);
       navegar(u.trocaSenhaObrigatoria ? '/trocar-senha' : destino, { replace: true });
     } catch (e) {
-      setErro(e instanceof ErroApi ? e.message : 'Erro inesperado. Tente novamente.');
+      // Senha errada fica embaixo do formulário, sem apontar campo: não revela qual dos dois errou.
+      if (!campos.deApi(form, e)) {
+        setErro(e instanceof ErroApi ? e.message : 'Erro inesperado. Tente novamente.');
+      }
       setEnviando(false);
     }
   }
@@ -55,27 +62,35 @@ export function Login() {
           </p>
         )}
 
-        <label className="rotulo">
-          E-mail ou CPF
-          <input
-            className="campo"
-            type="text"
-            autoComplete="username"
-            autoCapitalize="none"
-            value={login}
-            onChange={(e) => setLogin(e.target.value)}
-          />
-        </label>
-        <label className="rotulo">
-          Senha
-          <input
-            className="campo"
-            type="password"
-            autoComplete="current-password"
-            value={senha}
-            onChange={(e) => setSenha(e.target.value)}
-          />
-        </label>
+        <div className="campo-grupo">
+          <label className="rotulo">
+            E-mail ou CPF
+            <input
+              className="campo"
+              type="text"
+              autoComplete="username"
+              autoCapitalize="none"
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
+              {...campos.props('login')}
+            />
+          </label>
+          {campos.mensagem('login')}
+        </div>
+        <div className="campo-grupo">
+          <label className="rotulo">
+            Senha
+            <input
+              className="campo"
+              type="password"
+              autoComplete="current-password"
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              {...campos.props('senha')}
+            />
+          </label>
+          {campos.mensagem('senha')}
+        </div>
         {erro && (
           <p className="erro" role="alert">
             {erro}
