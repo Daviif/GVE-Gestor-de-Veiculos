@@ -101,6 +101,14 @@ rotasReservas.post('/', async (req, res) => {
       if (await tx.feriado.findUnique({ where: { data: paraDataBanco(entrada.data) } })) {
         throw erroFeriado();
       }
+      // Mesma ideia para o veículo: se o administrador o desativou nesse meio-tempo, a
+      // desativação (que trava a linha com FOR UPDATE e cancela as reservas futuras) termina
+      // antes e esta reserva é recusada, em vez de ficar num carro desativado (RN10).
+      const [situacao] = await tx.$queryRaw<{ ativo: boolean }[]>`
+        SELECT ativo FROM veiculo WHERE id = ${veiculo.id} FOR SHARE`;
+      if (!situacao?.ativo) {
+        throw new ErroApi(422, 'VEICULO_INDISPONIVEL', 'Veículo indisponível. Escolha outro.');
+      }
       const criada = await tx.reserva.create({
         data: {
           veiculoId: veiculo.id,

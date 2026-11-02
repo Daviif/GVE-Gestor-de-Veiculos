@@ -8,6 +8,7 @@ import { rotasHistorico } from './routes/historico';
 import { rotasReservas } from './routes/reservas';
 import { rotasSaude } from './routes/saude';
 import { rotasUsuarios } from './routes/usuarios';
+import { rotasVeiculos } from './routes/veiculos';
 
 export function criarApp() {
   const app = express();
@@ -24,6 +25,7 @@ export function criarApp() {
   app.use('/api/v1/usuarios', rotasUsuarios);
   app.use('/api/v1/feriados', rotasFeriados);
   app.use('/api/v1/historico', rotasHistorico);
+  app.use('/api/v1/veiculos', rotasVeiculos);
 
   app.use('/api', rotaNaoEncontrada);
   app.use(tratarErros);
