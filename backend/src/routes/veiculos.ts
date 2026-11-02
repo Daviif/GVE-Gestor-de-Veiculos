@@ -102,7 +102,7 @@ rotasVeiculos.post('/', exigirPerfil('ADMINISTRADOR'), async (req, res) => {
     });
     res.status(201).json({ veiculo: { ...veiculo, reservasFuturas: 0 } });
   } catch (erro) {
-    if (placaDuplicada(erro)) throw new ErroApi(409, 'PLACA_DUPLICADA', PLACA_DUPLICADA);
+    if (placaDuplicada(erro)) throw new ErroApi(409, 'PLACA_DUPLICADA', PLACA_DUPLICADA, 'placa');
     throw erro;
   }
 });
@@ -132,7 +132,7 @@ rotasVeiculos.put('/:id', exigirPerfil('ADMINISTRADOR'), async (req, res) => {
     });
     res.json({ veiculo });
   } catch (erro) {
-    if (placaDuplicada(erro)) throw new ErroApi(409, 'PLACA_DUPLICADA', PLACA_DUPLICADA);
+    if (placaDuplicada(erro)) throw new ErroApi(409, 'PLACA_DUPLICADA', PLACA_DUPLICADA, 'placa');
     throw erro;
   }
 });

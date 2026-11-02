@@ -4,11 +4,14 @@ import type { RespostaErro } from '@gve/shared';
 export class ErroApi extends Error {
   readonly status: number;
   readonly codigo: string;
+  /** Campo do formulário a que o erro se refere, quando a API informa. */
+  readonly campo?: string;
 
-  constructor(status: number, codigo: string, mensagem: string) {
+  constructor(status: number, codigo: string, mensagem: string, campo?: string) {
     super(mensagem);
     this.status = status;
     this.codigo = codigo;
+    this.campo = campo;
   }
 }
 
@@ -40,5 +43,6 @@ export async function api<T>(caminho: string, opcoes: { metodo?: string; corpo?:
     resposta.status,
     erro?.codigo ?? 'ERRO_INTERNO',
     erro?.mensagem ?? 'Erro inesperado. Tente novamente.',
+    erro?.campo,
   );
 }

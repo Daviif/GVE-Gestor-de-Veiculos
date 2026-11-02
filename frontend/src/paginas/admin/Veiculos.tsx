@@ -1,6 +1,7 @@
 import { ROTULO_TURNO, veiculoSchema, type ReservaAfetada, type Veiculo } from '@gve/shared';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, ErroApi } from '../../api';
+import { useErrosDeCampo } from '../../componentes/errosDeCampo';
 import { dataComSemana } from '../../datas';
 import { useToast } from '../../toast/contexto';
 
@@ -30,14 +31,17 @@ function FormVeiculo({ inicial, textoBotao, aoSalvar, aoCancelar }: PropsForm) {
   const [placa, setPlaca] = useState(inicial?.placa ?? '');
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const campos = useErrosDeCampo();
 
-  async function enviar(evento: FormEvent) {
+  async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
+    const form = evento.currentTarget;
     setErro(null);
+    campos.limpar();
 
     const validacao = veiculoSchema.safeParse({ placa, modelo });
     if (!validacao.success) {
-      setErro(validacao.error.issues[0]?.message ?? 'Dados inválidos.');
+      campos.deValidacao(form, validacao.error);
       return;
     }
 
@@ -49,7 +53,7 @@ function FormVeiculo({ inicial, textoBotao, aoSalvar, aoCancelar }: PropsForm) {
       });
       aoSalvar(r.veiculo);
     } catch (e) {
-      setErro(mensagemDe(e));
+      if (!campos.deApi(form, e)) setErro(mensagemDe(e));
     } finally {
       setEnviando(false);
     }
@@ -57,26 +61,34 @@ function FormVeiculo({ inicial, textoBotao, aoSalvar, aoCancelar }: PropsForm) {
 
   return (
     <form className="form-veiculo" onSubmit={enviar} noValidate>
-      <input
-        className="campo"
-        type="text"
-        placeholder="Modelo (ex.: Fiat Mobi)"
-        aria-label="Modelo"
-        autoComplete="off"
-        value={modelo}
-        onChange={(e) => setModelo(e.target.value)}
-      />
-      <input
-        className="campo campo-placa"
-        type="text"
-        placeholder="Placa"
-        aria-label="Placa"
-        autoCapitalize="characters"
-        autoComplete="off"
-        maxLength={8}
-        value={placa}
-        onChange={(e) => setPlaca(e.target.value)}
-      />
+      <div className="campo-grupo campo-grupo-modelo">
+        <input
+          className="campo"
+          type="text"
+          placeholder="Modelo (ex.: Fiat Mobi)"
+          aria-label="Modelo"
+          autoComplete="off"
+          value={modelo}
+          {...campos.props('modelo')}
+          onChange={(e) => setModelo(e.target.value)}
+        />
+        {campos.mensagem('modelo')}
+      </div>
+      <div className="campo-grupo campo-grupo-placa">
+        <input
+          className="campo campo-placa"
+          type="text"
+          placeholder="Placa"
+          aria-label="Placa"
+          autoCapitalize="characters"
+          autoComplete="off"
+          maxLength={8}
+          value={placa}
+          {...campos.props('placa')}
+          onChange={(e) => setPlaca(e.target.value)}
+        />
+        {campos.mensagem('placa')}
+      </div>
       <button type="submit" className="veiculo-salvar" disabled={enviando}>
         {enviando ? 'Salvando…' : textoBotao}
       </button>

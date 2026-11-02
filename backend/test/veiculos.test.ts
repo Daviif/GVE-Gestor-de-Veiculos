@@ -98,6 +98,7 @@ describe('POST /veiculos', () => {
     expect(resposta.body.erro).toEqual({
       codigo: 'PLACA_DUPLICADA',
       mensagem: 'Já existe um veículo com essa placa.',
+      campo: 'placa',
     });
   });
 

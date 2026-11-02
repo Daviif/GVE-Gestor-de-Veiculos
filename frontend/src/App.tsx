@@ -6,6 +6,7 @@ import { Layout } from './componentes/Layout';
 import { itensAdmin } from './componentes/navegacao';
 import { Agenda } from './paginas/Agenda';
 import { Feriados } from './paginas/admin/Feriados';
+import { Historico } from './paginas/admin/Historico';
 import { Usuarios } from './paginas/admin/Usuarios';
 import { Veiculos } from './paginas/admin/Veiculos';
 import { EmConstrucao } from './paginas/EmConstrucao';
@@ -21,6 +22,7 @@ const telasAdmin: Partial<Record<(typeof itensAdmin)[number]['caminho'], ReactNo
   '/admin/usuarios': <Usuarios />,
   '/admin/veiculos': <Veiculos />,
   '/admin/feriados': <Feriados />,
+  '/admin/historico': <Historico />,
 };
 
 export function Rotas() {

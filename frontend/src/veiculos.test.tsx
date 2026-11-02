@@ -56,6 +56,13 @@ function corpoDa(fetch: ReturnType<typeof simular>, metodo: string, url: string)
   return JSON.parse(chamada![1]!.body as string);
 }
 
+/** Mensagem de erro mostrada ao lado do campo (ligada a ele por aria-describedby). */
+async function erroDoCampo(rotulo: string): Promise<string> {
+  const campo = screen.getByLabelText(rotulo);
+  await waitFor(() => expect(campo.getAttribute('aria-invalid')).toBe('true'));
+  return document.getElementById(campo.getAttribute('aria-describedby') ?? '')?.textContent ?? '';
+}
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -127,7 +134,11 @@ describe('Veículos (administração)', () => {
       if (metodo === 'GET' && caminho === '/veiculos') return json(200, { veiculos: [argo] });
       if (metodo === 'POST' && caminho === '/veiculos') {
         return json(409, {
-          erro: { codigo: 'PLACA_DUPLICADA', mensagem: 'Já existe um veículo com essa placa.' },
+          erro: {
+            codigo: 'PLACA_DUPLICADA',
+            mensagem: 'Já existe um veículo com essa placa.',
+            campo: 'placa',
+          },
         });
       }
       return sessaoDoAdmin(metodo, caminho);
@@ -140,10 +151,10 @@ describe('Veículos (administração)', () => {
     preencher('Placa', 'ABC1234');
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
 
-    expect((await screen.findByRole('alert')).textContent).toBe(
-      'Já existe um veículo com essa placa.',
-    );
-    expect(screen.getByLabelText('Placa')).toBeTruthy();
+    // O erro da API aponta a placa: aparece ao lado dela, que recebe o foco.
+    expect(await erroDoCampo('Placa')).toBe('Já existe um veículo com essa placa.');
+    expect(document.activeElement).toBe(screen.getByLabelText('Placa'));
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('valida a placa antes de enviar', async () => {
@@ -159,7 +170,8 @@ describe('Veículos (administração)', () => {
     preencher('Placa', '123');
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
 
-    expect((await screen.findByRole('alert')).textContent).toContain('Placa inválida');
+    expect(await erroDoCampo('Placa')).toContain('Placa inválida');
+    expect(document.activeElement).toBe(screen.getByLabelText('Placa'));
     expect(fetch.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
   });
 
