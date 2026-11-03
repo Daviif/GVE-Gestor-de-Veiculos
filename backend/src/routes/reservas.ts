@@ -2,19 +2,13 @@ import {
   cancelamentoSchema,
   disponibilidadeQuerySchema,
   novaReservaSchema,
+  turnoJaComecou,
   type Reserva,
   type VeiculoDisponivel,
 } from '@gve/shared';
 import { Router } from 'express';
 import { z } from 'zod';
-import {
-  deDataBanco,
-  dentroDaJanela,
-  hojeEmSaoPaulo,
-  janelaDeDatas,
-  paraDataBanco,
-  travarDatas,
-} from '../datas';
+import { deDataBanco, dentroDaJanela, janelaDeDatas, paraDataBanco, travarDatas } from '../datas';
 import { prisma } from '../db';
 import { Prisma } from '../generated/prisma/client';
 import { autenticar } from '../middleware/autenticacao';
@@ -227,9 +221,13 @@ rotasReservas.post('/:id/cancelar', async (req, res) => {
   if (reserva.status === 'CANCELADA') {
     throw new ErroApi(409, 'JA_CANCELADA', 'Esta reserva já foi cancelada.');
   }
-  // Reserva passada não pode ser cancelada (RN05): só serve para o histórico.
-  if (deDataBanco(reserva.data) < hojeEmSaoPaulo()) {
-    throw new ErroApi(409, 'RESERVA_PASSADA', 'Não dá para cancelar uma reserva que já ocorreu.');
+  // RN05: só reservas futuras; a de hoje, até o turno começar. Depois disso é histórico.
+  if (turnoJaComecou(deDataBanco(reserva.data), reserva.turno)) {
+    throw new ErroApi(
+      409,
+      'RESERVA_PASSADA',
+      'Este turno já começou; a reserva não pode mais ser cancelada.',
+    );
   }
 
   const entrada = cancelamentoSchema.parse(req.body ?? {});

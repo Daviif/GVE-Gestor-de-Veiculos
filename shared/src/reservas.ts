@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-/** Turnos de reserva (RN06). */
+/** Turnos de reserva (RN04). */
 export const TURNOS = ['MATUTINO', 'VESPERTINO'] as const;
 export type Turno = (typeof TURNOS)[number];
 
@@ -8,6 +8,49 @@ export const ROTULO_TURNO: Record<Turno, string> = {
   MATUTINO: 'Manhã',
   VESPERTINO: 'Tarde',
 };
+
+/** Horário de cada turno, em horas cheias de Brasília. O vespertino termina às 17h. */
+export const HORARIO_TURNO: Record<Turno, { inicio: number; fim: number }> = {
+  MATUTINO: { inicio: 7, fim: 12 },
+  VESPERTINO: { inicio: 13, fim: 17 },
+};
+
+/** 'MATUTINO' → '7h às 12h'. */
+export function horarioDoTurno(turno: Turno): string {
+  const { inicio, fim } = HORARIO_TURNO[turno];
+  return `${inicio}h às ${fim}h`;
+}
+
+/** Data ('YYYY-MM-DD') e minutos desde a meia-noite, no fuso de Brasília. */
+function agoraEmSaoPaulo(agora: Date): { data: string; minutos: number } {
+  const partes = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    })
+      .formatToParts(agora)
+      .map((p) => [p.type, p.value]),
+  );
+  return {
+    data: `${partes.year}-${partes.month}-${partes.day}`,
+    minutos: Number(partes.hour) * 60 + Number(partes.minute),
+  };
+}
+
+/**
+ * RN05: só reservas futuras podem ser canceladas. A de hoje deixa de ser futura quando o
+ * turno começa (7h ou 13h em Brasília). Usada pela API e pela tela, para decidirem igual.
+ */
+export function turnoJaComecou(data: string, turno: Turno, agora: Date = new Date()): boolean {
+  const hoje = agoraEmSaoPaulo(agora);
+  if (data !== hoje.data) return data < hoje.data;
+  return hoje.minutos >= HORARIO_TURNO[turno].inicio * 60;
+}
 
 export const DESTINO_MAX = 200;
 

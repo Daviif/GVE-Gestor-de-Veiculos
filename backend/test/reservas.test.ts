@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hojeEmSaoPaulo, janelaDeDatas, paraDataBanco, somarDias } from '../src/datas';
 import { criarApp } from '../src/app';
 import { prisma } from '../src/db';
@@ -175,6 +175,104 @@ describe('POST /reservas', () => {
   });
 });
 
+describe('regras da nova reserva', () => {
+  const HOJE = hojeEmSaoPaulo();
+  const reservar = (agente: ReturnType<typeof request.agent>, corpo: object) =>
+    agente.post('/api/v1/reservas').send(corpo);
+
+  it('janela: aceita D+5 e D+7, recusa D+4 e D+8 (RN02)', async () => {
+    const { agente } = await entrarLogado();
+    const veiculo = await criarVeiculo('AAA1A11');
+    const corpo = (dias: number) => ({
+      data: somarDias(HOJE, dias),
+      turno: 'MATUTINO',
+      veiculoId: veiculo.id,
+      destino: 'Escola X',
+    });
+
+    for (const dias of [4, 8]) {
+      const resposta = await reservar(agente, corpo(dias));
+      expect(resposta.status, `D+${dias}`).toBe(422);
+      expect(resposta.body.erro.codigo).toBe('DATA_FORA_DA_JANELA');
+    }
+    for (const dias of [5, 7]) {
+      expect((await reservar(agente, corpo(dias))).status, `D+${dias}`).toBe(201);
+    }
+  });
+
+  it('depois de cancelada, a vaga pode ser reservada de novo (RN01)', async () => {
+    const { agente } = await entrarLogado();
+    const veiculo = await criarVeiculo('AAA1A11');
+    const corpo = { data: DATA1, turno: 'MATUTINO', veiculoId: veiculo.id, destino: 'Escola X' };
+
+    const primeira = await reservar(agente, corpo);
+    await agente.post(`/api/v1/reservas/${primeira.body.reserva.id}/cancelar`).send({}).expect(200);
+    expect((await reservar(agente, corpo)).status).toBe(201);
+  });
+
+  it('o mesmo servidor reserva os dois turnos e mais de um carro no dia (RN03, RN04)', async () => {
+    const { agente } = await entrarLogado();
+    const carro1 = await criarVeiculo('AAA1A11');
+    const carro2 = await criarVeiculo('BBB2B22');
+    const base = { data: DATA1, destino: 'Escola X' };
+
+    expect(
+      (await reservar(agente, { ...base, turno: 'MATUTINO', veiculoId: carro1.id })).status,
+    ).toBe(201);
+    expect(
+      (await reservar(agente, { ...base, turno: 'VESPERTINO', veiculoId: carro1.id })).status,
+    ).toBe(201);
+    expect(
+      (await reservar(agente, { ...base, turno: 'MATUTINO', veiculoId: carro2.id })).status,
+    ).toBe(201);
+  });
+
+  it('aceita sábado e domingo; só o feriado cadastrado bloqueia (RN11)', async () => {
+    // Segunda, 19/10/2026, 9h em Brasília: a janela é sáb 24, dom 25 e seg 26.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-19T12:00:00Z'));
+    try {
+      const { agente } = await entrarLogado();
+      const veiculo = await criarVeiculo('AAA1A11');
+      await prisma.feriado.create({
+        data: { data: paraDataBanco('2026-10-26'), descricao: 'Feriado', abrangencia: 'MUNICIPAL' },
+      });
+      const corpo = (data: string) => ({
+        data,
+        turno: 'MATUTINO',
+        veiculoId: veiculo.id,
+        destino: 'Escola X',
+      });
+
+      const permitidas = await agente.get('/api/v1/reservas/datas-permitidas').expect(200);
+      expect(permitidas.body.datas).toEqual(['2026-10-24', '2026-10-25']);
+
+      expect((await reservar(agente, corpo('2026-10-24'))).status, 'sábado').toBe(201);
+      expect((await reservar(agente, corpo('2026-10-25'))).status, 'domingo').toBe(201);
+      const feriado = await reservar(agente, corpo('2026-10-26'));
+      expect(feriado.status, 'feriado').toBe(422);
+      expect(feriado.body.erro.codigo).toBe('DATA_FERIADO');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('recusa turno que não existe (RN04) e destino vazio (RN06)', async () => {
+    const { agente } = await entrarLogado();
+    const veiculo = await criarVeiculo('AAA1A11');
+    const base = { data: DATA1, turno: 'MATUTINO', veiculoId: veiculo.id, destino: 'Escola X' };
+
+    const turno = await reservar(agente, { ...base, turno: 'NOTURNO' });
+    expect(turno.status).toBe(400);
+    expect(turno.body.erro.mensagem).toBe('Selecione o turno.');
+
+    const destino = await reservar(agente, { ...base, destino: '   ' });
+    expect(destino.status).toBe(400);
+    expect(destino.body.erro.mensagem).toBe('Informe o destino.');
+    expect(await prisma.reserva.count()).toBe(0);
+  });
+});
+
 describe('GET /reservas/minhas', () => {
   it('devolve só as reservas do próprio usuário', async () => {
     const { agente, usuario } = await entrarLogado();
@@ -313,5 +411,63 @@ describe('POST /reservas/:id/cancelar', () => {
     const { agente } = await entrarLogado();
     const resposta = await agente.post('/api/v1/reservas/9999/cancelar').send({});
     expect(resposta.status).toBe(404);
+  });
+
+  describe('reserva de hoje: só até o turno começar (RN05)', () => {
+    const HOJE = hojeEmSaoPaulo();
+    // Horários de Brasília escritos em UTC (UTC-3): 06:59 = 09:59Z, 07:00 = 10:00Z.
+    const relogio = (horaUtc: string) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(`${HOJE}T${horaUtc}:00Z`));
+    };
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    async function reservaDeHoje(usuarioId: number, turno: 'MATUTINO' | 'VESPERTINO') {
+      const veiculo = await criarVeiculo(turno === 'MATUTINO' ? 'AAA1A11' : 'BBB2B22');
+      return prisma.reserva.create({
+        data: {
+          veiculoId: veiculo.id,
+          usuarioId,
+          data: paraDataBanco(HOJE),
+          turno,
+          destino: 'Escola X',
+        },
+      });
+    }
+
+    it('às 6h59 ainda cancela a matutina', async () => {
+      relogio('09:59');
+      const { agente, usuario } = await entrarLogado();
+      const reserva = await reservaDeHoje(usuario.id, 'MATUTINO');
+      expect((await agente.post(`/api/v1/reservas/${reserva.id}/cancelar`).send({})).status).toBe(
+        200,
+      );
+    });
+
+    it('às 7h a matutina já começou, mas a vespertina ainda cancela até as 13h', async () => {
+      relogio('10:00');
+      const { agente, usuario } = await entrarLogado();
+      const matutina = await reservaDeHoje(usuario.id, 'MATUTINO');
+      const vespertina = await reservaDeHoje(usuario.id, 'VESPERTINO');
+
+      const recusada = await agente.post(`/api/v1/reservas/${matutina.id}/cancelar`).send({});
+      expect(recusada.status).toBe(409);
+      expect(recusada.body.erro.codigo).toBe('RESERVA_PASSADA');
+      expect(
+        (await agente.post(`/api/v1/reservas/${vespertina.id}/cancelar`).send({})).status,
+      ).toBe(200);
+    });
+
+    it('às 13h a vespertina também já começou', async () => {
+      relogio('16:00');
+      const { agente, usuario } = await entrarLogado();
+      const vespertina = await reservaDeHoje(usuario.id, 'VESPERTINO');
+      expect(
+        (await agente.post(`/api/v1/reservas/${vespertina.id}/cancelar`).send({})).status,
+      ).toBe(409);
+    });
   });
 });
