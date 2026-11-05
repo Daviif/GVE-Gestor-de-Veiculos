@@ -11,6 +11,13 @@ describe('loginSchema', () => {
     expect(resultado.success).toBe(false);
     expect(resultado.error?.issues[0]?.message).toBe('Informe o e-mail ou o CPF.');
   });
+
+  it('recusa login ou senha maiores que os do cadastro', () => {
+    const login = loginSchema.safeParse({ login: `${'a'.repeat(250)}@x.com`, senha: 'x' });
+    expect(login.error?.issues[0]?.message).toBe('E-mail ou CPF longo demais.');
+    const senha = loginSchema.safeParse({ login: 'ana@exemplo.com', senha: 'x'.repeat(129) });
+    expect(senha.error?.issues[0]?.message).toBe('Senha longa demais.');
+  });
 });
 
 describe('normalizarLogin', () => {

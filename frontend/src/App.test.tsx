@@ -1,9 +1,10 @@
 import type { UsuarioSessao } from '@gve/shared';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Rotas } from './App';
 import { ProvedorSessao } from './auth/sessao';
+import { anoAtual } from './datas';
 import { ProvedorToast } from './toast/ProvedorToast';
 
 const servidora: UsuarioSessao = {
@@ -47,6 +48,14 @@ function abrir(caminho: string) {
 
 function preencher(rotulo: string, valor: string) {
   fireEvent.change(screen.getByLabelText(rotulo), { target: { value: valor } });
+}
+
+/** A mensagem mostrada ao lado do campo; confere que ele ficou marcado como inválido. */
+async function erroDoCampo(rotulo: string): Promise<string> {
+  const campo = screen.getByLabelText(rotulo);
+  await waitFor(() => expect(campo.getAttribute('aria-invalid')).toBe('true'));
+  const mensagem = document.getElementById(campo.getAttribute('aria-describedby') ?? '');
+  return mensagem?.textContent ?? '';
 }
 
 afterEach(() => {
@@ -102,7 +111,10 @@ describe('login', () => {
     const fetch = simularApi({ 'GET /auth/me': naoAutenticado });
     abrir('/entrar');
     fireEvent.click(await screen.findByRole('button', { name: 'Entrar' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('Informe o e-mail ou o CPF.');
+    expect(await erroDoCampo('E-mail ou CPF')).toBe('Informe o e-mail ou o CPF.');
+    expect(await erroDoCampo('Senha')).toBe('Informe a senha.');
+    // O foco vai para o primeiro campo com erro.
+    expect(document.activeElement).toBe(screen.getByLabelText('E-mail ou CPF'));
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
@@ -112,6 +124,7 @@ describe('troca de senha obrigatória', () => {
     const fetch = simularApi({
       'GET /auth/me': () => json(200, { usuario: { ...servidora, trocaSenhaObrigatoria: true } }),
       'PUT /auth/senha': () => json(200, { usuario: servidora }),
+      'GET /reservas/minhas': () => json(200, { reservas: [] }),
     });
     abrir('/');
     expect(await screen.findByRole('heading', { name: 'Crie sua senha' })).toBeTruthy();
@@ -122,9 +135,8 @@ describe('troca de senha obrigatória', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Salvar e continuar' }));
     expect(await screen.findByRole('heading', { name: 'Minhas reservas' })).toBeTruthy();
     expect(screen.getByText('Senha criada. Boas-vindas!')).toBeTruthy();
-    expect(JSON.parse(fetch.mock.calls.at(-1)![1]!.body as string)).toEqual({
-      novaSenha: 'nova-senha-456',
-    });
+    const chamada = fetch.mock.calls.find(([url, init]) => url === '/api/v1/auth/senha' && init);
+    expect(JSON.parse(chamada![1]!.body as string)).toEqual({ novaSenha: 'nova-senha-456' });
   });
 
   it('recusa confirmação diferente', async () => {
@@ -136,7 +148,8 @@ describe('troca de senha obrigatória', () => {
     preencher('Nova senha', 'nova-senha-456');
     preencher('Confirmar nova senha', 'outra-senha-789');
     fireEvent.click(screen.getByRole('button', { name: 'Salvar e continuar' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('As senhas não conferem.');
+    expect(await erroDoCampo('Confirmar nova senha')).toBe('As senhas não conferem.');
+    expect(screen.getByLabelText('Nova senha').getAttribute('aria-invalid')).toBeNull();
   });
 });
 
@@ -154,6 +167,69 @@ describe('rotas por perfil', () => {
     abrir('/admin/usuarios');
     expect(await screen.findByRole('heading', { name: 'Usuários' })).toBeTruthy();
     expect(screen.getAllByRole('link', { name: 'Veículos' }).length).toBeGreaterThan(0);
+  });
+});
+
+describe('Usuários', () => {
+  it('erro da API que aponta um campo aparece ao lado dele', async () => {
+    simularApi({
+      'GET /auth/me': () => json(200, { usuario: { ...servidora, perfil: 'ADMINISTRADOR' } }),
+      'GET /usuarios': () => json(200, { usuarios: [] }),
+      'POST /usuarios': () =>
+        json(409, {
+          erro: {
+            codigo: 'CPF_DUPLICADO',
+            mensagem: 'Já existe um usuário com esse CPF.',
+            campo: 'cpf',
+          },
+        }),
+    });
+    abrir('/admin/usuarios');
+    await screen.findByText('Nenhum usuário cadastrado.');
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Cadastrar usuário' }));
+    preencher('Nome', 'Carlos Servidor');
+    preencher('E-mail', 'carlos@gve.local');
+    preencher('CPF', '529.982.247-25');
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+
+    expect(await erroDoCampo('CPF')).toBe('Já existe um usuário com esse CPF.');
+    expect(document.activeElement).toBe(screen.getByLabelText('CPF'));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('Minhas reservas', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('a reserva de hoje só tem "Cancelar" até o turno começar (RN05)', async () => {
+    // 8h em Brasília (11h UTC): o matutino (7h) já começou, o vespertino (13h) ainda não.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-21T11:00:00Z'));
+    const veiculo = { id: 1, placa: 'GVE1A23', modelo: 'Fiat Argo' };
+    const reserva = (id: number, turno: string) => ({
+      id,
+      data: '2026-10-21',
+      turno,
+      destino: `Escola ${turno}`,
+      status: 'ATIVA',
+      veiculo,
+    });
+    simularApi({
+      'GET /auth/me': () => json(200, { usuario: servidora }),
+      'GET /reservas/minhas': () =>
+        json(200, { reservas: [reserva(1, 'VESPERTINO'), reserva(2, 'MATUTINO')] }),
+    });
+    abrir('/');
+
+    const matutina = (await screen.findByText(/Escola MATUTINO/)).closest('li')!;
+    const vespertina = screen.getByText(/Escola VESPERTINO/).closest('li')!;
+    // O nome acessível do botão diz a data e o turno (WCAG 2.4.4, #20).
+    const botaoCancelar = { name: /^Cancelar reserva de / };
+    expect(within(matutina).queryByRole('button', botaoCancelar)).toBeNull();
+    expect(within(vespertina).getByRole('button', botaoCancelar)).toBeTruthy();
   });
 });
 
@@ -202,5 +278,155 @@ describe('Minha conta', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Salvar nova senha' }));
     expect(await screen.findByText('Sua sessão expirou. Entre novamente.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Entrar' })).toBeTruthy();
+  });
+});
+
+describe('Feriados', () => {
+  // Mesmo cálculo da tela: o ano corrente em São Paulo.
+  const ANO = anoAtual();
+  const admin = { ...servidora, perfil: 'ADMINISTRADOR' };
+  const natal = {
+    id: 1,
+    data: `${ANO}-12-25`,
+    descricao: 'Natal',
+    abrangencia: 'NACIONAL',
+    reservasAtivas: 0,
+  };
+
+  it('lista os feriados do ano e exclui com confirmação', async () => {
+    vi.stubGlobal('confirm', () => true);
+    const fetch = simularApi({
+      'GET /auth/me': () => json(200, { usuario: admin }),
+      [`GET /feriados?ano=${ANO}`]: () =>
+        json(200, { feriados: [{ ...natal, reservasAtivas: 2 }] }),
+      'DELETE /feriados/1': () => json(204),
+    });
+    abrir('/admin/feriados');
+
+    const item = await screen.findByRole('listitem', { name: /Natal/ });
+    expect(item.textContent).toContain('25/12');
+    expect(item.textContent).toContain('2 reservas ativas');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir' }));
+    expect(await screen.findByText('Feriado excluído.')).toBeTruthy();
+    expect(screen.queryByRole('listitem', { name: /Natal/ })).toBeNull();
+    expect(fetch).toHaveBeenCalledWith('/api/v1/feriados/1', expect.anything());
+  });
+
+  it('cadastra e avisa quando a data já tem reservas (RN11)', async () => {
+    const fetch = simularApi({
+      'GET /auth/me': () => json(200, { usuario: admin }),
+      [`GET /feriados?ano=${ANO}`]: () => json(200, { feriados: [] }),
+      'POST /feriados': () =>
+        json(201, {
+          feriado: {
+            id: 2,
+            data: `${ANO}-07-16`,
+            descricao: 'Aniversário da cidade',
+            abrangencia: 'MUNICIPAL',
+            reservasAtivas: 3,
+          },
+        }),
+    });
+    abrir('/admin/feriados');
+    await screen.findByText(/Nenhum feriado cadastrado/);
+
+    preencher('Data', `${ANO}-07-16`);
+    preencher('Nome do feriado', 'Aniversário da cidade');
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar' }));
+
+    expect(await screen.findByText('Feriado cadastrado.')).toBeTruthy();
+    expect(screen.getByRole('listitem', { name: /Aniversário da cidade/ })).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toMatch(
+      /Já existem reservas ativas em .*16\/07\/\d{4} \(3 reservas\)/,
+    );
+    expect(JSON.parse(fetch.mock.calls.at(-1)![1]!.body as string)).toEqual({
+      data: `${ANO}-07-16`,
+      descricao: 'Aniversário da cidade',
+      abrangencia: 'MUNICIPAL',
+    });
+  });
+
+  it('valida o formulário antes de enviar', async () => {
+    const fetch = simularApi({
+      'GET /auth/me': () => json(200, { usuario: admin }),
+      [`GET /feriados?ano=${ANO}`]: () => json(200, { feriados: [] }),
+    });
+    abrir('/admin/feriados');
+    await screen.findByText(/Nenhum feriado cadastrado/);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar' }));
+    expect(await erroDoCampo('Data')).toBe('Informe a data.');
+    expect(await erroDoCampo('Nome do feriado')).toBe('Informe o nome do feriado.');
+    expect(fetch).not.toHaveBeenCalledWith('/api/v1/feriados', expect.anything());
+  });
+
+  it('importação que termina depois da troca de ano não mistura as listas', async () => {
+    let responderImportacao!: (resposta: Response) => void;
+    simularApi({
+      'GET /auth/me': () => json(200, { usuario: admin }),
+      [`GET /feriados?ano=${ANO}`]: () => json(200, { feriados: [] }),
+      [`GET /feriados?ano=${ANO + 1}`]: () => json(200, { feriados: [] }),
+      'POST /feriados/importar': () => new Promise((resolver) => (responderImportacao = resolver)),
+    });
+    abrir('/admin/feriados');
+    await screen.findByText(/Nenhum feriado cadastrado/);
+
+    // Importa o ano atual e, antes da resposta, vai para o próximo ano.
+    fireEvent.click(screen.getByRole('button', { name: 'Importar feriados nacionais' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo ano' }));
+    await screen.findByText(`Nenhum feriado cadastrado em ${ANO + 1}.`, { exact: false });
+
+    responderImportacao(new Response(JSON.stringify({ importados: [natal], ignorados: 0 })));
+    expect(await screen.findByText(`1 feriado nacional importado em ${ANO}.`)).toBeTruthy();
+    expect(screen.queryByRole('listitem', { name: /Natal/ })).toBeNull();
+  });
+
+  it('importa os feriados nacionais do ano exibido', async () => {
+    const fetch = simularApi({
+      'GET /auth/me': () => json(200, { usuario: admin }),
+      [`GET /feriados?ano=${ANO}`]: () => json(200, { feriados: [] }),
+      'POST /feriados/importar': () => json(200, { importados: [natal], ignorados: 1 }),
+    });
+    abrir('/admin/feriados');
+    await screen.findByText(/Nenhum feriado cadastrado/);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Importar feriados nacionais' }));
+    expect(await screen.findByText(`1 feriado nacional importado em ${ANO}.`)).toBeTruthy();
+    expect(screen.getByRole('listitem', { name: /Natal/ })).toBeTruthy();
+    expect(JSON.parse(fetch.mock.calls.at(-1)![1]!.body as string)).toEqual({ ano: ANO });
+  });
+
+  it('mostra a mensagem quando a BrasilAPI falha', async () => {
+    simularApi({
+      'GET /auth/me': () => json(200, { usuario: admin }),
+      [`GET /feriados?ano=${ANO}`]: () => json(200, { feriados: [] }),
+      'POST /feriados/importar': () =>
+        json(502, {
+          erro: { codigo: 'BRASILAPI_INDISPONIVEL', mensagem: 'BrasilAPI fora do ar.' },
+        }),
+    });
+    abrir('/admin/feriados');
+    await screen.findByText(/Nenhum feriado cadastrado/);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Importar feriados nacionais' }));
+    expect(await screen.findByText('BrasilAPI fora do ar.')).toBeTruthy();
+  });
+
+  it('navega entre os anos', async () => {
+    simularApi({
+      'GET /auth/me': () => json(200, { usuario: admin }),
+      [`GET /feriados?ano=${ANO}`]: () => json(200, { feriados: [natal] }),
+      [`GET /feriados?ano=${ANO + 1}`]: () => json(200, { feriados: [] }),
+    });
+    abrir('/admin/feriados');
+    await screen.findByRole('listitem', { name: /Natal/ });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo ano' }));
+    expect(await screen.findByRole('heading', { name: `Feriados de ${ANO + 1}` })).toBeTruthy();
+    expect(
+      await screen.findByText(`Nenhum feriado cadastrado em ${ANO + 1}.`, { exact: false }),
+    ).toBeTruthy();
+    expect(screen.queryByRole('listitem', { name: /Natal/ })).toBeNull();
   });
 });

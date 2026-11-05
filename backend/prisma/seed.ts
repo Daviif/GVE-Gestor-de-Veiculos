@@ -1,6 +1,7 @@
 // Seed idempotente: pode rodar várias vezes sem duplicar nem sobrescrever dados.
 // Uso: npm run db:seed (o db:reset também roda; no Prisma 7 o seed não é automático).
 
+import { SENHA_MAX, SENHA_MIN } from '@gve/shared';
 import { config } from '../src/config';
 import { prisma } from '../src/db';
 import { gerarHashSenha } from '../src/seguranca/senha';
@@ -22,6 +23,10 @@ const veiculosDeExemplo = [
 async function main() {
   if (!admin.senha && config.NODE_ENV === 'production') {
     throw new Error('Defina SEED_ADMIN_SENHA para criar o administrador em produção.');
+  }
+  // Fora desse intervalo o login recusa a senha e o administrador não consegue entrar.
+  if (admin.senha && (admin.senha.length < SENHA_MIN || admin.senha.length > SENHA_MAX)) {
+    throw new Error(`SEED_ADMIN_SENHA precisa ter de ${SENHA_MIN} a ${SENHA_MAX} caracteres.`);
   }
 
   // update vazio: um administrador que já existe mantém a senha que trocou.

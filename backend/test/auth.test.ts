@@ -3,6 +3,7 @@ import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { criarApp } from '../src/app';
 import { prisma } from '../src/db';
+import { falhasPorIp, MAX_FALHAS_POR_IP } from '../src/routes/auth';
 import { autenticar, exigirPerfil } from '../src/middleware/autenticacao';
 import { tratarErros } from '../src/middleware/erros';
 import { gerarHashSenha } from '../src/seguranca/senha';
@@ -56,9 +57,11 @@ function cookieSessao(resposta: request.Response): string {
 }
 
 beforeEach(async () => {
+  await falhasPorIp.resetAll();
   await prisma.sessao.deleteMany();
   await prisma.logAuditoria.deleteMany();
   await prisma.reserva.deleteMany();
+  await prisma.feriado.deleteMany();
   await prisma.usuario.deleteMany();
 });
 
@@ -131,6 +134,13 @@ describe('POST /auth/login', () => {
     expect(resposta.status).toBe(400);
     expect(resposta.body.erro.mensagem).toBe('Informe o e-mail ou o CPF.');
   });
+
+  it('recusa login gigante sem gravá-lo no log de auditoria', async () => {
+    const { resposta } = await entrar(`${'a'.repeat(90_000)}@gve.local`, 'errada');
+    expect(resposta.status).toBe(400);
+    expect(resposta.body.erro.mensagem).toBe('E-mail ou CPF longo demais.');
+    expect(await prisma.logAuditoria.count()).toBe(0);
+  });
 });
 
 describe('bloqueio após 5 tentativas em 15 min', () => {
@@ -199,6 +209,30 @@ describe('bloqueio após 5 tentativas em 15 min', () => {
     for (let i = 0; i < 5; i++) await entrar('ninguem@gve.local', 'x');
     expect((await entrar('ninguem@gve.local', 'x')).resposta.status).toBe(429);
     expect((await entrar()).resposta.status).toBe(200);
+  });
+});
+
+describe('limite de falhas por IP', () => {
+  it('barra o IP depois de 20 falhas, mesmo espalhadas por contas diferentes', async () => {
+    await criarUsuario({});
+    for (let i = 0; i < MAX_FALHAS_POR_IP; i++) {
+      const { resposta } = await entrar(`ninguem${i}@gve.local`, 'errada');
+      expect(resposta.status).toBe(401);
+    }
+
+    // Nem a senha certa passa enquanto o IP está barrado.
+    const { resposta } = await entrar('ana@gve.local', SENHA);
+    expect(resposta.status).toBe(429);
+    expect(resposta.body.erro.codigo).toBe('MUITAS_TENTATIVAS');
+    expect(resposta.headers['retry-after']).toBeDefined();
+  });
+
+  it('logins certos não contam, para não barrar quem divide o mesmo IP', async () => {
+    await criarUsuario({});
+    for (let i = 0; i < MAX_FALHAS_POR_IP + 5; i++) {
+      const { resposta } = await entrar();
+      expect(resposta.status).toBe(200);
+    }
   });
 });
 
@@ -293,6 +327,7 @@ describe('PUT /auth/senha', () => {
     const repetida = await agente.put('/api/v1/auth/senha').send({ novaSenha: SENHA });
     expect(repetida.status).toBe(400);
     expect(repetida.body.erro.codigo).toBe('SENHA_REPETIDA');
+    expect(repetida.body.erro.campo).toBe('novaSenha');
 
     const resposta = await agente.put('/api/v1/auth/senha').send({ novaSenha: 'nova-senha-456' });
     expect(resposta.status).toBe(200);
@@ -315,6 +350,7 @@ describe('PUT /auth/senha', () => {
       .send({ senhaAtual: 'errada', novaSenha: 'nova-senha-456' });
     expect(resposta.status).toBe(400);
     expect(resposta.body.erro.codigo).toBe('SENHA_ATUAL_INCORRETA');
+    expect(resposta.body.erro.campo).toBe('senhaAtual');
   });
 
   it('exige sessão', async () => {

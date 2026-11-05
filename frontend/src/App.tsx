@@ -4,7 +4,11 @@ import { RotaProtegida } from './auth/RotaProtegida';
 import { ProvedorSessao } from './auth/sessao';
 import { Layout } from './componentes/Layout';
 import { itensAdmin } from './componentes/navegacao';
+import { Agenda } from './paginas/Agenda';
+import { Feriados } from './paginas/admin/Feriados';
+import { Historico } from './paginas/admin/Historico';
 import { Usuarios } from './paginas/admin/Usuarios';
+import { Veiculos } from './paginas/admin/Veiculos';
 import { EmConstrucao } from './paginas/EmConstrucao';
 import { Login } from './paginas/Login';
 import { MinhaConta } from './paginas/MinhaConta';
@@ -16,6 +20,9 @@ import { ProvedorToast } from './toast/ProvedorToast';
 /** Telas da administração já prontas; as demais abrem "Em construção". */
 const telasAdmin: Partial<Record<(typeof itensAdmin)[number]['caminho'], ReactNode>> = {
   '/admin/usuarios': <Usuarios />,
+  '/admin/veiculos': <Veiculos />,
+  '/admin/feriados': <Feriados />,
+  '/admin/historico': <Historico />,
 };
 
 export function Rotas() {
@@ -29,7 +36,7 @@ export function Rotas() {
         <Route element={<Layout />}>
           <Route index element={<MinhasReservas />} />
           <Route path="/reservas/nova" element={<NovaReserva />} />
-          <Route path="/agenda" element={<EmConstrucao />} />
+          <Route path="/agenda" element={<Agenda />} />
           <Route path="/conta" element={<MinhaConta />} />
           <Route element={<RotaProtegida perfil="ADMINISTRADOR" />}>
             {itensAdmin.map((item) => (
