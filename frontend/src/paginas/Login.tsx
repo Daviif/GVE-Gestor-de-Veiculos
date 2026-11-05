@@ -5,8 +5,10 @@ import { ErroApi } from '../api';
 import { useSessao } from '../auth/contexto';
 import { useErrosDeCampo } from '../componentes/errosDeCampo';
 import { Logo } from '../componentes/Logo';
+import { useTitulo } from '../componentes/titulo';
 
 export function Login() {
+  useTitulo('Entrar');
   const { usuario, aviso, entrar } = useSessao();
   const navegar = useNavigate();
   const local = useLocation();

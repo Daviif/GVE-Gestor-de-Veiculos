@@ -1,10 +1,12 @@
 import { useNavigate } from 'react-router';
 import { useSessao } from '../auth/contexto';
 import { FormSenha } from '../componentes/FormSenha';
+import { useTitulo } from '../componentes/titulo';
 import { useToast } from '../toast/contexto';
 
 /** Troca obrigatória no primeiro acesso ou após redefinição pelo administrador. */
 export function TrocaSenha() {
+  useTitulo('Crie sua senha');
   const { sair } = useSessao();
   const navegar = useNavigate();
   const toast = useToast();

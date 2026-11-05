@@ -3,21 +3,28 @@
   --azul: #25338a;
   --azul-escuro: #1a2466;
   --azul-claro: #3b82d9;
+  /* Azul para texto: o --azul-claro só tem 3,9:1 no branco, abaixo dos 4,5:1 do WCAG AA. */
+  --azul-texto: #2b6cbd;
   --azul-selecao: #e6eefb;
   --azul-hover: #eef2fa;
   --foco: #dce4f7;
   --texto: #161b3d;
   --texto-medio: #3a4062;
   --texto-suave: #5d6383;
-  --texto-apagado: #8a8fa8;
+  --texto-apagado: #636884;
   --borda: #e2e4ec;
   --borda-campo: #d5d8e3;
+  /* Contorno de campo: 3:1 no branco, para dar para ver onde digitar (WCAG 1.4.11). */
+  --borda-controle: #80859e;
   --divisor: #eef0f4;
   --fundo: #f5f6f9;
   --fundo-externo: #e9ebf1;
   --vermelho: #b4372f;
   --vermelho-borda: #f0d3d0;
   --vermelho-fundo: #fcf1f0;
+  /* Botões de confirmar/salvar: texto branco com 5,1:1 (WCAG AA). */
+  --verde: #2e7d3e;
+  --verde-hover: #276f36;
   --amarelo: #efb443;
   --amarelo-fundo: #fff8e5;
   --amarelo-texto: #7a5200;
@@ -93,7 +100,7 @@ p {
 .campo {
   height: 48px;
   width: 100%;
-  border: 1px solid var(--borda-campo);
+  border: 1px solid var(--borda-controle);
   border-radius: 10px;
   padding: 0 14px;
   font-size: 15px;
@@ -105,6 +112,49 @@ p {
 .campo:focus {
   border-color: var(--azul);
   box-shadow: 0 0 0 3px var(--foco);
+}
+
+/* Foco do teclado bem visível em botões, links e cartões clicáveis (WCAG 2.4.7). O mouse não
+   mostra o contorno: :focus-visible só aparece quando a navegação é pelo teclado. */
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--azul);
+  outline-offset: 2px;
+}
+
+/* Texto só para leitores de tela. */
+.so-leitor {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Primeiro item do Tab: pula o menu e vai direto ao conteúdo. Só aparece com foco. */
+.pular-conteudo {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--azul);
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+
+.pular-conteudo:focus {
+  transform: none;
+}
+
+/* O conteúdo recebe foco pelo link acima e ao trocar de tela, mas não precisa de contorno. */
+.conteudo:focus {
+  outline: none;
 }
 
 /* Campo com erro ao lado: rótulo e campo, e a mensagem logo abaixo. */
@@ -293,7 +343,7 @@ p {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--azul-claro);
+  color: var(--azul-texto);
 }
 
 .titulo-cartao {
@@ -477,7 +527,7 @@ p {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  color: #7a7f99;
+  color: var(--texto-suave);
   font-size: 12px;
   font-weight: 600;
   text-decoration: none;
@@ -578,7 +628,7 @@ p {
 .perfil-tipo {
   font-size: 12px;
   font-weight: 700;
-  color: var(--azul-claro);
+  color: var(--azul-texto);
   margin-top: 4px;
 }
 
@@ -1207,7 +1257,7 @@ p {
 .etiqueta-perfil {
   font-size: 11px;
   font-weight: 700;
-  color: var(--azul-claro);
+  color: var(--azul-texto);
 }
 
 /* Feriados */
@@ -1396,7 +1446,7 @@ p {
 
 .reserva-anterior {
   background: #eeeff3;
-  color: #6b7090;
+  color: var(--texto-suave);
 }
 
 .reserva-barra {
@@ -1688,7 +1738,7 @@ p {
   height: 52px;
   border: none;
   border-radius: 12px;
-  background: #3e9b4f;
+  background: var(--verde);
   color: #fff;
   font-size: 16px;
   font-weight: 700;
@@ -1696,7 +1746,7 @@ p {
 }
 
 .botao-confirmar:hover:not(:disabled) {
-  background: #348543;
+  background: var(--verde-hover);
 }
 
 .botao-confirmar:disabled {
@@ -1742,7 +1792,7 @@ p {
   padding: 0 18px;
   border: none;
   border-radius: 10px;
-  background: #3e9b4f;
+  background: var(--verde);
   color: #fff;
   font-size: 14px;
   font-weight: 700;
@@ -1750,7 +1800,7 @@ p {
 }
 
 .botao-salvar:hover:not(:disabled) {
-  background: #348543;
+  background: var(--verde-hover);
 }
 
 .botao-salvar:disabled {
@@ -1827,7 +1877,7 @@ p {
 
 .status-pill.inativo {
   background: #eeeff3;
-  color: #6b7090;
+  color: var(--texto-suave);
 }
 
 .usuario-acoes {
@@ -2060,7 +2110,7 @@ p {
   padding: 0 18px;
   border: none;
   border-radius: 10px;
-  background: #3e9b4f;
+  background: var(--verde);
   color: #fff;
   font-size: 14px;
   font-weight: 700;
@@ -2068,7 +2118,7 @@ p {
 }
 
 .veiculo-salvar:hover:not(:disabled) {
-  background: #348543;
+  background: var(--verde-hover);
 }
 
 .veiculo-salvar:disabled {
@@ -2125,7 +2175,7 @@ p {
   padding: 3px 10px;
   border-radius: 20px;
   background: #eeeff3;
-  color: #6b7090;
+  color: var(--texto-suave);
   font-size: 12px;
   font-weight: 700;
 }

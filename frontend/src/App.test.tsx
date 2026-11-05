@@ -226,8 +226,10 @@ describe('Minhas reservas', () => {
 
     const matutina = (await screen.findByText(/Escola MATUTINO/)).closest('li')!;
     const vespertina = screen.getByText(/Escola VESPERTINO/).closest('li')!;
-    expect(within(matutina).queryByRole('button', { name: 'Cancelar' })).toBeNull();
-    expect(within(vespertina).getByRole('button', { name: 'Cancelar' })).toBeTruthy();
+    // O nome acessível do botão diz a data e o turno (WCAG 2.4.4, #20).
+    const botaoCancelar = { name: /^Cancelar reserva de / };
+    expect(within(matutina).queryByRole('button', botaoCancelar)).toBeNull();
+    expect(within(vespertina).getByRole('button', botaoCancelar)).toBeTruthy();
   });
 });
 

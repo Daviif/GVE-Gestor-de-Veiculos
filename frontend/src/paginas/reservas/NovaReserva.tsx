@@ -174,6 +174,11 @@ export function NovaReserva() {
   return (
     <div className="pagina pagina-estreita">
       <h1 className="titulo-pagina">Nova reserva</h1>
+      {/* A barra é visual; o leitor de tela ouve a etapa por esta linha, que muda a cada passo. */}
+      <p className="so-leitor" aria-live="polite">
+        Etapa {passo} de 3:{' '}
+        {passo === 1 ? 'data e turno' : passo === 2 ? 'veículo e destino' : 'confirmação'}
+      </p>
       <div className="passos-barra" aria-hidden="true">
         {[1, 2, 3].map((n) => (
           <div key={n} className="passo">

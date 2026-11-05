@@ -30,7 +30,13 @@ function ItemProxima({ reserva, podeCancelar, aoCancelar }: PropsItem) {
         </div>
       </div>
       {podeCancelar && (
-        <button type="button" className="botao-perigo-pequeno" onClick={() => aoCancelar(reserva)}>
+        <button
+          type="button"
+          className="botao-perigo-pequeno"
+          // Com várias reservas, "Cancelar" sozinho não diz qual (WCAG 2.4.4).
+          aria-label={`Cancelar reserva de ${dataComSemana(reserva.data)}, ${ROTULO_TURNO[reserva.turno]}`}
+          onClick={() => aoCancelar(reserva)}
+        >
           Cancelar
         </button>
       )}
