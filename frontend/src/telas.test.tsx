@@ -1,5 +1,5 @@
 import { ANTECEDENCIA_MIN, type UsuarioSessao } from '@gve/shared';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Rotas } from './App';
@@ -94,11 +94,11 @@ describe('Agenda da frota', () => {
     simularAgenda();
     abrir('/agenda');
 
-    expect(await screen.findByRole('grid', { name: 'Agenda semanal' })).toBeTruthy();
+    expect(await screen.findByRole('table', { name: 'Agenda semanal' })).toBeTruthy();
     expect(screen.getAllByText('Fiat Argo').length).toBeGreaterThan(0);
 
-    const minha = await screen.findByRole('button', { name: 'Ana' });
-    const dele = screen.getByRole('button', { name: 'Bruno' });
+    const minha = await screen.findByRole('button', { name: /^Reserva de Ana/ });
+    const dele = screen.getByRole('button', { name: /^Reserva de Bruno/ });
     expect(minha.className).toContain('minha');
     expect(dele.className).not.toContain('minha');
   });
@@ -107,7 +107,7 @@ describe('Agenda da frota', () => {
     simularAgenda();
     abrir('/agenda');
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Bruno' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Reserva de Bruno/ }));
     const detalhe = await screen.findByRole('dialog', { name: /Bruno Costa/ });
     expect(detalhe.textContent).toContain('Destino: Escola Beta');
     expect(detalhe.textContent).toContain('Fiat Argo · AAA1A11');
@@ -120,7 +120,7 @@ describe('Agenda da frota', () => {
     simularAgenda();
     abrir('/agenda');
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Bruno' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Reserva de Bruno/ }));
     await screen.findByRole('dialog', { name: /Bruno Costa/ });
 
     // Em telas estreitas a grade rola na horizontal logo depois do clique; isso não pode fechar.
@@ -142,7 +142,7 @@ describe('Agenda da frota', () => {
       return undefined;
     });
     abrir('/agenda');
-    await screen.findByRole('grid', { name: 'Agenda semanal' });
+    await screen.findByRole('table', { name: 'Agenda semanal' });
 
     // O primeiro dia reservável (D+5) pode cair na semana seguinte.
     if (inicioDaSemana(alvo) !== inicio) {
@@ -165,13 +165,17 @@ describe('Agenda da frota', () => {
   it('oferece "+ reservar" só nos 3 dias de D+5 a D+7 (2 turnos cada), somando as duas semanas', async () => {
     simularAgenda();
     abrir('/agenda');
-    await screen.findByRole('grid', { name: 'Agenda semanal' });
+    await screen.findByRole('table', { name: 'Agenda semanal' });
 
-    const livres = () => screen.queryAllByRole('button', { name: /^Reservar Fiat Argo/ }).length;
+    // Só a grade do desktop (o jsdom também desenha os cartões do celular).
+    const livres = () =>
+      within(screen.getByRole('table', { name: 'Agenda semanal' })).queryAllByRole('button', {
+        name: /^Reservar Fiat Argo/,
+      }).length;
     const naSemanaAtual = livres();
 
     fireEvent.click(screen.getByRole('button', { name: 'Próxima semana' }));
-    await screen.findByRole('grid', { name: 'Agenda semanal' });
+    await screen.findByRole('table', { name: 'Agenda semanal' });
     const naSemanaSeguinte = livres();
 
     // D+5 a D+7 cabem sempre nessas duas semanas: 3 dias × manhã e tarde, com 1 veículo.
@@ -196,7 +200,7 @@ describe('Agenda da frota', () => {
     expect(screen.queryByText('Carregando…')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
-    expect(await screen.findByRole('grid', { name: 'Agenda semanal' })).toBeTruthy();
+    expect(await screen.findByRole('table', { name: 'Agenda semanal' })).toBeTruthy();
   });
 });
 
@@ -238,7 +242,7 @@ describe('Minhas reservas', () => {
     // A anterior aparece só para leitura, como concluída.
     expect(screen.getByText('Concluída')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Cancelar reserva de .*Manhã$/ }));
     expect(await screen.findByText('Reserva cancelada.')).toBeTruthy();
     expect(screen.queryByRole('listitem', { name: /Escola Alfa/ })).toBeNull();
     expect(screen.getByText('Cancelada')).toBeTruthy();

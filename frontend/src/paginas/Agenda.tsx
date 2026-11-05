@@ -230,9 +230,13 @@ export function Agenda() {
           {/* Desktop: grade semanal, uma linha por veículo e turno */}
           <div className="so-desktop">
             <div className="agenda-rolagem">
-              <div className="agenda-grade" role="grid" aria-label="Agenda semanal">
-                <div className="agenda-linha agenda-linha-topo">
-                  <div />
+              {/* Tabela para o leitor de tela: cada célula é anunciada com o dia (coluna) e o
+                  veículo e turno (linha). */}
+              <div className="agenda-grade" role="table" aria-label="Agenda semanal">
+                <div className="agenda-linha agenda-linha-topo" role="row">
+                  <div role="columnheader">
+                    <span className="so-leitor">Veículo e turno</span>
+                  </div>
                   {dias.map((dia, i) => {
                     const feriado = feriadoPorDia.get(dia);
                     const classe = [
@@ -243,7 +247,7 @@ export function Agenda() {
                       .filter(Boolean)
                       .join(' ');
                     return (
-                      <div key={dia} className={classe}>
+                      <div key={dia} className={classe} role="columnheader">
                         <div className="agenda-cabecalho-dia">
                           {DIAS_SEMANA_CURTOS[i]} {dia.slice(8, 10)}
                         </div>
@@ -256,7 +260,11 @@ export function Agenda() {
                 </div>
 
                 {dados.veiculos.length === 0 && (
-                  <div className="vazio agenda-vazia">Nenhum veículo cadastrado.</div>
+                  <div role="row">
+                    <div className="vazio agenda-vazia" role="cell">
+                      Nenhum veículo cadastrado.
+                    </div>
+                  </div>
                 )}
 
                 {dados.veiculos.map((v, indice) =>
@@ -268,14 +276,20 @@ export function Agenda() {
                           ? 'agenda-linha agenda-linha-veiculo'
                           : 'agenda-linha'
                       }
+                      role="row"
                     >
-                      <div className="agenda-rotulo">
+                      <div className="agenda-rotulo" role="rowheader">
                         <div className="agenda-rotulo-veiculo">
-                          {turno === TURNOS[0] && (
+                          {turno === TURNOS[0] ? (
                             <>
                               <span className="agenda-veiculo-nome">{v.modelo}</span>
                               <span className="agenda-veiculo-placa">{v.placa}</span>
                             </>
+                          ) : (
+                            // Na linha da tarde o nome não aparece, mas o leitor de tela precisa dele.
+                            <span className="so-leitor">
+                              {v.modelo} {v.placa}
+                            </span>
                           )}
                         </div>
                         <span className="agenda-rotulo-turno">{ROTULO_TURNO[turno]}</span>
@@ -291,13 +305,16 @@ export function Agenda() {
                           .filter(Boolean)
                           .join(' ');
                         return (
-                          <div key={dia} className={classe}>
+                          <div key={dia} className={classe} role="cell">
                             {reserva ? (
                               <button
                                 type="button"
                                 data-agenda-chip={reserva.id}
                                 className={minha ? 'agenda-chip minha' : 'agenda-chip'}
                                 aria-expanded={popover?.id === reserva.id}
+                                // O nome visível é só o primeiro nome; o leitor de tela ouve tudo,
+                                // inclusive o destino, sem precisar abrir o detalhe.
+                                aria-label={`Reserva de ${reserva.usuario.nome}: ${v.modelo}, ${diaComSemana(dia)}, ${ROTULO_TURNO[turno]}. Destino: ${reserva.destino}`}
                                 title={reserva.usuario.nome}
                                 onClick={(e) => alternarDetalhe(reserva, e)}
                               >
@@ -392,6 +409,7 @@ export function Agenda() {
                         <button
                           type="button"
                           className="agenda-faixa-livre"
+                          aria-label={`Reservar ${v.modelo} ${v.placa}, ${diaComSemana(diaMovel)}, ${ROTULO_TURNO[turno]}`}
                           onClick={() => reservar(v, diaMovel, turno)}
                         >
                           Livre · reservar
