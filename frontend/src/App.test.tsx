@@ -1,5 +1,5 @@
 import type { UsuarioSessao } from '@gve/shared';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Rotas } from './App';
@@ -196,6 +196,40 @@ describe('Usuários', () => {
     expect(await erroDoCampo('CPF')).toBe('Já existe um usuário com esse CPF.');
     expect(document.activeElement).toBe(screen.getByLabelText('CPF'));
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('Minhas reservas', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('a reserva de hoje só tem "Cancelar" até o turno começar (RN05)', async () => {
+    // 8h em Brasília (11h UTC): o matutino (7h) já começou, o vespertino (13h) ainda não.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-21T11:00:00Z'));
+    const veiculo = { id: 1, placa: 'GVE1A23', modelo: 'Fiat Argo' };
+    const reserva = (id: number, turno: string) => ({
+      id,
+      data: '2026-10-21',
+      turno,
+      destino: `Escola ${turno}`,
+      status: 'ATIVA',
+      veiculo,
+    });
+    simularApi({
+      'GET /auth/me': () => json(200, { usuario: servidora }),
+      'GET /reservas/minhas': () =>
+        json(200, { reservas: [reserva(1, 'VESPERTINO'), reserva(2, 'MATUTINO')] }),
+    });
+    abrir('/');
+
+    const matutina = (await screen.findByText(/Escola MATUTINO/)).closest('li')!;
+    const vespertina = screen.getByText(/Escola VESPERTINO/).closest('li')!;
+    // O nome acessível do botão diz a data e o turno (WCAG 2.4.4, #20).
+    const botaoCancelar = { name: /^Cancelar reserva de / };
+    expect(within(matutina).queryByRole('button', botaoCancelar)).toBeNull();
+    expect(within(vespertina).getByRole('button', botaoCancelar)).toBeTruthy();
   });
 });
 

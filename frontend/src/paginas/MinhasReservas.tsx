@@ -1,4 +1,4 @@
-import { ROTULO_TURNO, type Reserva } from '@gve/shared';
+import { ROTULO_TURNO, turnoJaComecou, type Reserva } from '@gve/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { api, ErroApi } from '../api';
@@ -12,11 +12,12 @@ function mensagemDe(erro: unknown): string {
 
 interface PropsItem {
   reserva: Reserva;
+  podeCancelar: boolean;
   aoCancelar(reserva: Reserva): void;
 }
 
 /** Reserva futura: barra lateral azul, dados e botão "Cancelar" em vermelho. */
-function ItemProxima({ reserva, aoCancelar }: PropsItem) {
+function ItemProxima({ reserva, podeCancelar, aoCancelar }: PropsItem) {
   return (
     <li className="reserva-proxima" aria-label={`Reserva ${reserva.destino}`}>
       <div className="reserva-barra" aria-hidden="true" />
@@ -28,15 +29,17 @@ function ItemProxima({ reserva, aoCancelar }: PropsItem) {
           {reserva.veiculo.modelo} · {reserva.veiculo.placa} — {reserva.destino}
         </div>
       </div>
-      <button
-        type="button"
-        className="botao-perigo-pequeno"
-        // Com várias reservas, "Cancelar" sozinho não diz qual (WCAG 2.4.4).
-        aria-label={`Cancelar reserva de ${dataComSemana(reserva.data)}, ${ROTULO_TURNO[reserva.turno]}`}
-        onClick={() => aoCancelar(reserva)}
-      >
-        Cancelar
-      </button>
+      {podeCancelar && (
+        <button
+          type="button"
+          className="botao-perigo-pequeno"
+          // Com várias reservas, "Cancelar" sozinho não diz qual (WCAG 2.4.4).
+          aria-label={`Cancelar reserva de ${dataComSemana(reserva.data)}, ${ROTULO_TURNO[reserva.turno]}`}
+          onClick={() => aoCancelar(reserva)}
+        >
+          Cancelar
+        </button>
+      )}
     </li>
   );
 }
@@ -137,7 +140,13 @@ export function MinhasReservas() {
         ) : (
           <ul className="lista-reservas">
             {proximas.map((r) => (
-              <ItemProxima key={r.id} reserva={r} aoCancelar={cancelar} />
+              <ItemProxima
+                key={r.id}
+                reserva={r}
+                // RN05: a de hoje só até o turno começar (a API confere de novo).
+                podeCancelar={!turnoJaComecou(r.data, r.turno)}
+                aoCancelar={cancelar}
+              />
             ))}
           </ul>
         )}

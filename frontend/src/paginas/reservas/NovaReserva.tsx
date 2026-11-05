@@ -1,5 +1,6 @@
 import {
   errosPorCampo,
+  horarioDoTurno,
   novaReservaSchema,
   ROTULO_TURNO,
   TURNOS,
@@ -32,12 +33,6 @@ function lerPreenchimento(state: unknown): PreenchimentoReserva | null {
 function urlDisponibilidade(data: string, turno: string): string {
   return `/reservas/disponibilidade?data=${encodeURIComponent(data)}&turno=${turno}`;
 }
-
-/** Horário de referência de cada turno, só para a UI (as regras ficam no back). */
-const HORARIO_TURNO: Record<Turno, string> = {
-  MATUTINO: '7h às 12h',
-  VESPERTINO: '13h às 18h',
-};
 
 function mensagemDe(erro: unknown): string {
   return erro instanceof ErroApi ? erro.message : 'Erro inesperado. Tente novamente.';
@@ -242,7 +237,7 @@ export function NovaReserva() {
                   onClick={() => setTurno(t)}
                 >
                   <span className="turno-nome">{ROTULO_TURNO[t]}</span>
-                  <span className="turno-horario">{HORARIO_TURNO[t]}</span>
+                  <span className="turno-horario">{horarioDoTurno(t)}</span>
                 </button>
               ))}
             </div>
@@ -349,7 +344,7 @@ export function NovaReserva() {
             <div className="cartao-confirmacao-topo">
               <div className="cartao-confirmacao-rotulo">Confira sua reserva</div>
               <div className="cartao-confirmacao-titulo">
-                {dataLonga(data)} · {turno && ROTULO_TURNO[turno]}
+                {dataLonga(data)} · {turno && `${ROTULO_TURNO[turno]}, ${horarioDoTurno(turno)}`}
               </div>
             </div>
             <div className="cartao-confirmacao-corpo">
