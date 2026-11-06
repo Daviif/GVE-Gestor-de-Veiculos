@@ -1,11 +1,12 @@
 import {
+  idSchema,
   situacaoVeiculoSchema,
   veiculoSchema,
   type ReservaAfetada,
   type Veiculo,
 } from '@gve/shared';
 import { Router } from 'express';
-import { z } from 'zod';
+import { registrarAuditoria } from '../auditoria';
 import { deDataBanco, hojeEmSaoPaulo, paraDataBanco } from '../datas';
 import { prisma } from '../db';
 import { Prisma } from '../generated/prisma/client';
@@ -22,7 +23,7 @@ rotasVeiculos.use(autenticar());
 
 /** Busca o veículo do :id da rota ou responde 404. */
 async function buscarVeiculo(idParam: unknown): Promise<Veiculo> {
-  const id = z.coerce.number().int().positive().safeParse(idParam);
+  const id = idSchema.safeParse(idParam);
   const veiculo = id.success
     ? await prisma.veiculo.findUnique({ where: { id: id.data }, select: campos })
     : null;
@@ -88,15 +89,13 @@ rotasVeiculos.post('/', exigirPerfil('ADMINISTRADOR'), async (req, res) => {
   try {
     const veiculo = await prisma.$transaction(async (tx) => {
       const criado = await tx.veiculo.create({ data: entrada, select: campos });
-      await tx.logAuditoria.create({
-        data: {
-          acao: 'VEICULO_CRIADO',
-          usuarioId: req.usuario!.id,
-          entidade: 'veiculo',
-          entidadeId: criado.id,
-          detalhes: entrada,
-          ip: req.ip,
-        },
+      await registrarAuditoria(tx, {
+        acao: 'VEICULO_CRIADO',
+        usuarioId: req.usuario!.id,
+        entidade: 'veiculo',
+        entidadeId: criado.id,
+        detalhes: entrada,
+        ip: req.ip,
       });
       return criado;
     });
@@ -118,15 +117,13 @@ rotasVeiculos.put('/:id', exigirPerfil('ADMINISTRADOR'), async (req, res) => {
         data: entrada,
         select: campos,
       });
-      await tx.logAuditoria.create({
-        data: {
-          acao: 'VEICULO_EDITADO',
-          usuarioId: req.usuario!.id,
-          entidade: 'veiculo',
-          entidadeId: anterior.id,
-          detalhes: { antes: { placa: anterior.placa, modelo: anterior.modelo }, depois: entrada },
-          ip: req.ip,
-        },
+      await registrarAuditoria(tx, {
+        acao: 'VEICULO_EDITADO',
+        usuarioId: req.usuario!.id,
+        entidade: 'veiculo',
+        entidadeId: anterior.id,
+        detalhes: { antes: { placa: anterior.placa, modelo: anterior.modelo }, depois: entrada },
+        ip: req.ip,
       });
       return editado;
     });
@@ -203,15 +200,13 @@ rotasVeiculos.patch('/:id/situacao', exigirPerfil('ADMINISTRADOR'), async (req, 
       data: { ativo },
       select: campos,
     });
-    await tx.logAuditoria.create({
-      data: {
-        acao: ativo ? 'VEICULO_ATIVADO' : 'VEICULO_DESATIVADO',
-        usuarioId: admin.id,
-        entidade: 'veiculo',
-        entidadeId: atual.id,
-        detalhes: { placa: atual.placa, reservasCanceladas: canceladas.length },
-        ip: req.ip,
-      },
+    await registrarAuditoria(tx, {
+      acao: ativo ? 'VEICULO_ATIVADO' : 'VEICULO_DESATIVADO',
+      usuarioId: admin.id,
+      entidade: 'veiculo',
+      entidadeId: atual.id,
+      detalhes: { placa: atual.placa, reservasCanceladas: canceladas.length },
+      ip: req.ip,
     });
     return { veiculo: atualizado, canceladas };
   });

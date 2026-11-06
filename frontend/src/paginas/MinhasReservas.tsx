@@ -1,23 +1,20 @@
-import { ROTULO_TURNO, turnoJaComecou, type Reserva } from '@gve/shared';
+import { ROTULO_TURNO, situacaoDaReserva, type Reserva } from '@gve/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { api, ErroApi } from '../api';
+import { api, mensagemDe } from '../api';
 import { useSessao } from '../auth/contexto';
-import { dataComSemana, hojeEmSaoPaulo } from '../datas';
+import { dataComSemana } from '../datas';
 import { useToast } from '../toast/contexto';
-
-function mensagemDe(erro: unknown): string {
-  return erro instanceof ErroApi ? erro.message : 'Erro inesperado. Tente novamente.';
-}
 
 interface PropsItem {
   reserva: Reserva;
-  podeCancelar: boolean;
+  /** Cancelamento desta reserva em andamento: o botão fica desabilitado contra duplo clique. */
+  cancelando: boolean;
   aoCancelar(reserva: Reserva): void;
 }
 
 /** Reserva futura: barra lateral azul, dados e botão "Cancelar" em vermelho. */
-function ItemProxima({ reserva, podeCancelar, aoCancelar }: PropsItem) {
+function ItemProxima({ reserva, cancelando, aoCancelar }: PropsItem) {
   return (
     <li className="reserva-proxima" aria-label={`Reserva ${reserva.destino}`}>
       <div className="reserva-barra" aria-hidden="true" />
@@ -29,17 +26,16 @@ function ItemProxima({ reserva, podeCancelar, aoCancelar }: PropsItem) {
           {reserva.veiculo.modelo} · {reserva.veiculo.placa} — {reserva.destino}
         </div>
       </div>
-      {podeCancelar && (
-        <button
-          type="button"
-          className="botao-perigo-pequeno"
-          // Com várias reservas, "Cancelar" sozinho não diz qual (WCAG 2.4.4).
-          aria-label={`Cancelar reserva de ${dataComSemana(reserva.data)}, ${ROTULO_TURNO[reserva.turno]}`}
-          onClick={() => aoCancelar(reserva)}
-        >
-          Cancelar
-        </button>
-      )}
+      <button
+        type="button"
+        className="botao-perigo-pequeno"
+        // Com várias reservas, "Cancelar" sozinho não diz qual (WCAG 2.4.4).
+        aria-label={`Cancelar reserva de ${dataComSemana(reserva.data)}, ${ROTULO_TURNO[reserva.turno]}`}
+        disabled={cancelando}
+        onClick={() => aoCancelar(reserva)}
+      >
+        {cancelando ? 'Cancelando…' : 'Cancelar'}
+      </button>
     </li>
   );
 }
@@ -70,6 +66,7 @@ export function MinhasReservas() {
   const toast = useToast();
   const [reservas, setReservas] = useState<Reserva[] | undefined>(undefined);
   const [erro, setErro] = useState<string | null>(null);
+  const [cancelando, setCancelando] = useState<number | null>(null);
   const primeiroNome = usuario?.nome.split(' ')[0];
 
   useEffect(() => {
@@ -79,11 +76,12 @@ export function MinhasReservas() {
   }, []);
 
   const { proximas, anteriores } = useMemo(() => {
-    const hoje = hojeEmSaoPaulo();
+    const agora = new Date();
     const proximas: Reserva[] = [];
     const anteriores: Reserva[] = [];
+    // RC02: a reserva de hoje passa para "Anteriores" quando o turno começa (a API confere de novo).
     for (const r of reservas ?? []) {
-      if (r.status === 'ATIVA' && r.data >= hoje) proximas.push(r);
+      if (situacaoDaReserva(r, agora) === 'AGENDADA') proximas.push(r);
       else anteriores.push(r);
     }
     // A API já ordena por data desc; nas próximas quero a mais perto primeiro.
@@ -99,6 +97,7 @@ export function MinhasReservas() {
     ) {
       return;
     }
+    setCancelando(reserva.id);
     try {
       const r = await api<{ reserva: Reserva }>(`/reservas/${reserva.id}/cancelar`, {
         metodo: 'POST',
@@ -108,6 +107,8 @@ export function MinhasReservas() {
       toast('Reserva cancelada.');
     } catch (e) {
       toast(mensagemDe(e));
+    } finally {
+      setCancelando(null);
     }
   }
 
@@ -132,9 +133,12 @@ export function MinhasReservas() {
       <section className="pilha-curta">
         <h2 className="rotulo-lista">Próximas</h2>
         {reservas === undefined ? (
-          <div className="vazio" role="status">
-            Carregando…
-          </div>
+          // Com erro de carga, a mensagem acima já explica; "Carregando…" ficaria para sempre.
+          erro ? null : (
+            <div className="vazio" role="status">
+              Carregando…
+            </div>
+          )
         ) : proximas.length === 0 ? (
           <div className="vazio">Você não tem reservas futuras.</div>
         ) : (
@@ -143,8 +147,7 @@ export function MinhasReservas() {
               <ItemProxima
                 key={r.id}
                 reserva={r}
-                // RN05: a de hoje só até o turno começar (a API confere de novo).
-                podeCancelar={!turnoJaComecou(r.data, r.turno)}
+                cancelando={cancelando === r.id}
                 aoCancelar={cancelar}
               />
             ))}

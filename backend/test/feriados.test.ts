@@ -213,7 +213,7 @@ describe('feriado e reserva na mesma data, ao mesmo tempo (RN11)', () => {
     let pedido!: Promise<request.Response>;
     // Faz o papel da reserva: trava a data, e o cadastro do feriado fica na fila até o commit.
     await prisma.$transaction(async (tx) => {
-      await travarDatas(tx, [DATA1!]);
+      await travarDatas(tx, [DATA1!], 'compartilhado');
       pedido = agente
         .post('/api/v1/feriados')
         .send({ data: DATA1, descricao: 'Ponto facultativo', abrangencia: 'MUNICIPAL' })
@@ -233,6 +233,19 @@ describe('feriado e reserva na mesma data, ao mesmo tempo (RN11)', () => {
     const resposta = await pedido;
     expect(resposta.status).toBe(201);
     expect(resposta.body.feriado.reservasAtivas).toBe(1);
+  });
+
+  it('reservas da mesma data não esperam umas pelas outras', async () => {
+    const { agente } = await entrarComo();
+    const veiculo = await prisma.veiculo.create({ data: { placa: 'ABC1D23', modelo: 'Carro' } });
+    // Faz o papel de outra reserva em andamento na mesma data: a nova não fica na fila.
+    const resposta = await prisma.$transaction(async (tx) => {
+      await travarDatas(tx, [DATA1!], 'compartilhado');
+      return agente
+        .post('/api/v1/reservas')
+        .send({ data: DATA1, turno: 'MATUTINO', veiculoId: veiculo.id, destino: 'Escola A' });
+    });
+    expect(resposta.status).toBe(201);
   });
 });
 

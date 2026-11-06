@@ -1,11 +1,11 @@
 import {
   historicoQuerySchema,
+  situacaoDaReserva,
   type ItemHistorico,
   type RespostaHistorico,
-  type SituacaoHistorico,
 } from '@gve/shared';
 import { Router } from 'express';
-import { deDataBanco, hojeEmSaoPaulo, paraDataBanco, somarDias } from '../datas';
+import { deDataBanco, paraDataBanco, somarDias } from '../datas';
 import { prisma } from '../db';
 import type { Prisma } from '../generated/prisma/client';
 import { autenticar, exigirPerfil } from '../middleware/autenticacao';
@@ -43,12 +43,6 @@ function montarFiltro(q: ReturnType<typeof historicoQuerySchema.parse>): Prisma.
   return where;
 }
 
-/** Deriva o status mostrado no histórico combinando status real e data. */
-function situacaoDe(status: 'ATIVA' | 'CANCELADA', data: string, hoje: string): SituacaoHistorico {
-  if (status === 'CANCELADA') return 'CANCELADA';
-  return data < hoje ? 'CONCLUIDA' : 'AGENDADA';
-}
-
 /** Lista o histórico de reservas (RF16), com filtros e paginação. */
 rotasHistorico.get('/', async (req, res) => {
   const q = historicoQuerySchema.parse(req.query);
@@ -56,7 +50,7 @@ rotasHistorico.get('/', async (req, res) => {
     throw new ErroApi(400, 'INTERVALO_INVALIDO', 'A data final deve vir depois da inicial.');
   }
   const where = montarFiltro(q);
-  const hoje = hojeEmSaoPaulo();
+  const agora = new Date();
 
   const [reservas, total] = await Promise.all([
     prisma.reserva.findMany({
@@ -85,7 +79,7 @@ rotasHistorico.get('/', async (req, res) => {
       data,
       turno: r.turno,
       destino: r.destino,
-      situacao: situacaoDe(r.status, data, hoje),
+      situacao: situacaoDaReserva({ status: r.status, data, turno: r.turno }, agora),
       canceladoEm: r.canceladoEm ? r.canceladoEm.toISOString() : null,
       veiculo: r.veiculo,
       usuario: r.usuario,

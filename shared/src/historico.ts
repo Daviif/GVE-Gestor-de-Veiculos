@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { dataSchema, TURNOS, type Turno } from './reservas';
+import { ID_MAX, idSchema } from './ids';
+import { dataSchema, TURNOS, type SituacaoReserva, type Turno } from './reservas';
 
 export const HISTORICO_TAMANHO_PADRAO = 25;
 export const HISTORICO_TAMANHO_MAX = 100;
@@ -8,9 +9,9 @@ export const HISTORICO_TAMANHO_MAX = 100;
 export const historicoQuerySchema = z.object({
   inicio: dataSchema.optional(),
   fim: dataSchema.optional(),
-  usuarioId: z.coerce.number().int().positive().optional(),
-  veiculoId: z.coerce.number().int().positive().optional(),
-  pagina: z.coerce.number().int().positive().default(1),
+  usuarioId: idSchema.optional(),
+  veiculoId: idSchema.optional(),
+  pagina: z.coerce.number().int().positive().max(ID_MAX).default(1),
   tamanho: z.coerce
     .number()
     .int()
@@ -21,8 +22,8 @@ export const historicoQuerySchema = z.object({
 
 export type HistoricoQuery = z.input<typeof historicoQuerySchema>;
 
-/** Situação derivada mostrada no histórico (depende do status + data da reserva). */
-export type SituacaoHistorico = 'AGENDADA' | 'CONCLUIDA' | 'CANCELADA';
+/** Situação mostrada no histórico (RC02, `situacaoDaReserva`). */
+export type SituacaoHistorico = SituacaoReserva;
 
 /** Uma linha do histórico: a reserva com quem reservou e situação derivada. */
 export interface ItemHistorico {

@@ -1,6 +1,7 @@
 import { mascararCpf, PERFIS, usuarioSchema, type Usuario, type UsuarioEntrada } from '@gve/shared';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { api, ErroApi } from '../../api';
+import { api, mensagemDe } from '../../api';
+import { useSessao } from '../../auth/contexto';
 import { useErrosDeCampo } from '../../componentes/errosDeCampo';
 import { useToast } from '../../toast/contexto';
 
@@ -9,19 +10,17 @@ const ROTULO_PERFIL: Record<(typeof PERFIS)[number], string> = {
   SERVIDOR: 'Servidor',
 };
 
-function mensagemDe(erro: unknown): string {
-  return erro instanceof ErroApi ? erro.message : 'Erro inesperado. Tente novamente.';
-}
-
 interface PropsForm {
   inicial?: Usuario;
   textoBotao: string;
   aoSalvar(usuario: Usuario, senhaProvisoria?: string): void;
   aoCancelar?(): void;
+  /** O administrador editando a si mesmo: o perfil fica travado (RC09). */
+  proprio?: boolean;
 }
 
 /** Formulário de cadastro/edição (nome, e-mail, CPF e perfil). */
-function FormUsuario({ inicial, textoBotao, aoSalvar, aoCancelar }: PropsForm) {
+function FormUsuario({ inicial, textoBotao, aoSalvar, aoCancelar, proprio }: PropsForm) {
   const [nome, setNome] = useState(inicial?.nome ?? '');
   const [email, setEmail] = useState(inicial?.email ?? '');
   const [cpf, setCpf] = useState(inicial ? mascararCpf(inicial.cpf) : '');
@@ -109,6 +108,8 @@ function FormUsuario({ inicial, textoBotao, aoSalvar, aoCancelar }: PropsForm) {
           className="campo"
           aria-label="Perfil"
           value={perfil}
+          disabled={proprio}
+          title={proprio ? 'Você não pode alterar o seu próprio perfil.' : undefined}
           {...campos.props('perfil')}
           onChange={(e) => setPerfil(e.target.value as UsuarioEntrada['perfil'])}
         >
@@ -140,6 +141,9 @@ function FormUsuario({ inicial, textoBotao, aoSalvar, aoCancelar }: PropsForm) {
 /** Usuários da secretaria (RF03, RF04): cadastro, edição, desativação e redefinição de senha. */
 export function Usuarios() {
   const toast = useToast();
+  const { usuario: eu } = useSessao();
+  // Linha com uma ação em andamento: os botões dela ficam desabilitados contra duplo clique.
+  const [ocupado, setOcupado] = useState<number | null>(null);
   const [usuarios, setUsuarios] = useState<Usuario[] | undefined>(undefined);
   const [erroCarga, setErroCarga] = useState<string | null>(null);
   const [editando, setEditando] = useState<number | null>(null);
@@ -177,6 +181,7 @@ export function Usuarios() {
     ) {
       return;
     }
+    setOcupado(usuario.id);
     try {
       const r = await api<{ usuario: Usuario }>(`/usuarios/${usuario.id}/situacao`, {
         metodo: 'PATCH',
@@ -186,11 +191,14 @@ export function Usuarios() {
       toast(ativo ? 'Usuário reativado.' : 'Usuário desativado.');
     } catch (e) {
       toast(mensagemDe(e));
+    } finally {
+      setOcupado(null);
     }
   }
 
   async function redefinirSenha(usuario: Usuario) {
     if (!window.confirm(`Gerar uma nova senha provisória para ${usuario.nome}?`)) return;
+    setOcupado(usuario.id);
     try {
       const r = await api<{ senhaProvisoria: string }>(`/usuarios/${usuario.id}/redefinir-senha`, {
         metodo: 'POST',
@@ -199,6 +207,8 @@ export function Usuarios() {
       setProvisoria({ nome: usuario.nome, senha: r.senhaProvisoria });
     } catch (e) {
       toast(mensagemDe(e));
+    } finally {
+      setOcupado(null);
     }
   }
 
@@ -271,6 +281,7 @@ export function Usuarios() {
               <div key={usuario.id} className="cartao-form" aria-label={`Editar ${usuario.nome}`}>
                 <FormUsuario
                   inicial={usuario}
+                  proprio={usuario.id === eu?.id}
                   textoBotao="Salvar"
                   aoSalvar={(editado) => {
                     substituir(editado);
@@ -307,6 +318,7 @@ export function Usuarios() {
                   <button
                     type="button"
                     className="botao-borda botao-pequeno"
+                    disabled={ocupado === usuario.id}
                     onClick={() => void redefinirSenha(usuario)}
                   >
                     Redefinir senha
@@ -314,6 +326,7 @@ export function Usuarios() {
                   <button
                     type="button"
                     className="botao-borda botao-pequeno"
+                    disabled={ocupado === usuario.id}
                     onClick={() => void mudarSituacao(usuario)}
                   >
                     {usuario.ativo ? 'Desativar' : 'Reativar'}

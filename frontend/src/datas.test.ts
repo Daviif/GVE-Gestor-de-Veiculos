@@ -7,9 +7,13 @@ import {
   diaComSemana,
   diaDaSemana,
   diaMes,
+  diaSemanaCurto,
   hojeEmSaoPaulo,
   inicioDaSemana,
+  mesPorExtenso,
+  primeiroDoMes,
   somarDias,
+  ultimoDoMes,
 } from './datas';
 
 describe('hoje em São Paulo', () => {
@@ -47,5 +51,23 @@ describe('formatos de exibição', () => {
     expect(diaDaSemana('2026-10-25')).toBe('Domingo');
     expect(diaDaSemana('2026-10-26')).toBe('Segunda');
     expect(diaDaSemana('2026-10-31')).toBe('Sábado');
+  });
+});
+
+describe('dia da semana curto e mês', () => {
+  it('abrevia o dia sem ponto e com maiúscula', () => {
+    expect(diaSemanaCurto('2026-10-19')).toBe('Seg');
+    expect(diaSemanaCurto('2026-10-24')).toBe('Sáb');
+    expect(diaSemanaCurto('2026-10-25')).toBe('Dom');
+  });
+
+  it('primeiro e último dia do mês, inclusive fevereiro de ano bissexto', () => {
+    expect(primeiroDoMes('2026-10-20')).toBe('2026-10-01');
+    expect(ultimoDoMes('2026-02-10')).toBe('2026-02-28');
+    expect(ultimoDoMes('2028-02-10')).toBe('2028-02-29');
+  });
+
+  it('mês por extenso com maiúscula', () => {
+    expect(mesPorExtenso('2026-10-20')).toBe('Outubro de 2026');
   });
 });

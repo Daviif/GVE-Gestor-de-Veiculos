@@ -8,32 +8,15 @@ import {
   type VeiculoHistorico,
 } from '@gve/shared';
 import { useEffect, useMemo, useState } from 'react';
-import { api, ErroApi } from '../../api';
-import { dataComSemana, hojeEmSaoPaulo, somarDias } from '../../datas';
-
-function mensagemDe(erro: unknown): string {
-  return erro instanceof ErroApi ? erro.message : 'Erro inesperado. Tente novamente.';
-}
-
-function primeiroDoMes(data: string): string {
-  return `${data.slice(0, 7)}-01`;
-}
-
-function ultimoDoMes(data: string): string {
-  const d = new Date(`${data}T00:00:00.000Z`);
-  d.setUTCMonth(d.getUTCMonth() + 1, 0);
-  return d.toISOString().slice(0, 10);
-}
-
-function nomeMes(data: string): string {
-  const d = new Date(`${data}T00:00:00.000Z`);
-  const nome = new Intl.DateTimeFormat('pt-BR', {
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(d);
-  return nome.charAt(0).toUpperCase() + nome.slice(1);
-}
+import { api, mensagemDe } from '../../api';
+import {
+  dataComSemana,
+  hojeEmSaoPaulo,
+  mesPorExtenso,
+  primeiroDoMes,
+  somarDias,
+  ultimoDoMes,
+} from '../../datas';
 
 const ROTULO_SITUACAO: Record<SituacaoHistorico, string> = {
   AGENDADA: 'Agendada',
@@ -172,7 +155,7 @@ export function Historico() {
           aria-label="Período"
         >
           <option value="TUDO">Todo o período</option>
-          <option value="MES">{nomeMes(hoje)}</option>
+          <option value="MES">{mesPorExtenso(hoje)}</option>
           <option value="PASSADAS">Já realizadas</option>
           <option value="FUTURAS">Agendadas</option>
         </select>
@@ -245,16 +228,17 @@ export function Historico() {
             <button
               type="button"
               className="botao-borda botao-pequeno"
-              disabled={paginaAtual <= 1}
-              onClick={() => setPagina((p) => p - 1)}
+              // Desabilitado enquanto carrega: um duplo clique pularia uma página.
+              disabled={carregando || paginaAtual <= 1}
+              onClick={() => setPagina(paginaAtual - 1)}
             >
               ← Anterior
             </button>
             <button
               type="button"
               className="botao-borda botao-pequeno"
-              disabled={paginaAtual >= totalPaginas}
-              onClick={() => setPagina((p) => p + 1)}
+              disabled={carregando || paginaAtual >= totalPaginas}
+              onClick={() => setPagina(paginaAtual + 1)}
             >
               Próxima →
             </button>

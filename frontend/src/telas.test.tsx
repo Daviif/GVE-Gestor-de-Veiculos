@@ -385,4 +385,49 @@ describe('Usuários (administração)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Redefinir senha' }));
     expect(await screen.findByText('Nova9876abc')).toBeTruthy();
   });
+
+  it('RC09: ao editar a si mesmo o perfil fica travado; ao editar outro, não', async () => {
+    const euMesmo = { ...carlos, id: admin.id, nome: 'Administrador', perfil: 'ADMINISTRADOR' };
+    simular((_metodo, caminho) => {
+      if (caminho === '/auth/me') return json(200, { usuario: admin });
+      if (caminho === '/usuarios') return json(200, { usuarios: [euMesmo, carlos] });
+      return undefined;
+    });
+    abrir('/admin/usuarios');
+
+    const minhaLinha = await screen.findByLabelText('Administrador');
+    fireEvent.click(within(minhaLinha).getByRole('button', { name: 'Editar' }));
+    const meuForm = screen.getByLabelText('Editar Administrador');
+    expect(within(meuForm).getByLabelText<HTMLSelectElement>('Perfil').disabled).toBe(true);
+
+    fireEvent.click(
+      within(screen.getByLabelText('Carlos Servidor')).getByRole('button', { name: 'Editar' }),
+    );
+    const outroForm = screen.getByLabelText('Editar Carlos Servidor');
+    expect(within(outroForm).getByLabelText<HTMLSelectElement>('Perfil').disabled).toBe(false);
+  });
+
+  it('RC10: o botão Desativar fica desabilitado enquanto a requisição anda', async () => {
+    vi.stubGlobal('confirm', () => true);
+    let responder: (r: Response) => void = () => {};
+    const fetch = simular((metodo, caminho) => {
+      if (caminho === '/auth/me') return json(200, { usuario: admin });
+      if (caminho === '/usuarios') return json(200, { usuarios: [carlos] });
+      if (metodo === 'PATCH' && caminho === '/usuarios/2/situacao') {
+        return new Promise<Response>((r) => (responder = r));
+      }
+      return undefined;
+    });
+    abrir('/admin/usuarios');
+    await screen.findByLabelText('Carlos Servidor');
+
+    const botao = screen.getByRole<HTMLButtonElement>('button', { name: 'Desativar' });
+    fireEvent.click(botao);
+    await waitFor(() => expect(botao.disabled).toBe(true));
+    fireEvent.click(botao);
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === 'PATCH')).toHaveLength(1);
+
+    responder(new Response(JSON.stringify({ usuario: { ...carlos, ativo: false } })));
+    expect(await screen.findByRole('button', { name: 'Reativar' })).toBeTruthy();
+  });
 });
