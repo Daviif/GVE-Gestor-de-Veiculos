@@ -231,6 +231,75 @@ describe('Minhas reservas', () => {
     expect(within(matutina).queryByRole('button', botaoCancelar)).toBeNull();
     expect(within(vespertina).getByRole('button', botaoCancelar)).toBeTruthy();
   });
+
+  it('RC02: a de hoje com turno começado já aparece em "Anteriores"', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-21T11:00:00Z'));
+    simularApi({
+      'GET /auth/me': () => json(200, { usuario: servidora }),
+      'GET /reservas/minhas': () =>
+        json(200, {
+          reservas: [
+            {
+              id: 2,
+              data: '2026-10-21',
+              turno: 'MATUTINO',
+              destino: 'Escola MATUTINO',
+              status: 'ATIVA',
+              veiculo: { id: 1, placa: 'GVE1A23', modelo: 'Fiat Argo' },
+            },
+          ],
+        }),
+    });
+    abrir('/');
+
+    const item = (await screen.findByText(/Escola MATUTINO/)).closest('li')!;
+    expect(item.closest('section')?.querySelector('h2')?.textContent).toBe('Anteriores');
+    expect(screen.getByText('Você não tem reservas futuras.')).toBeTruthy();
+  });
+
+  it('RC10: o botão "Cancelar" fica desabilitado enquanto a requisição anda', async () => {
+    vi.stubGlobal('confirm', () => true);
+    let responder: (r: Response) => void = () => {};
+    const reserva = {
+      id: 1,
+      data: '2099-01-10',
+      turno: 'MATUTINO',
+      destino: 'Escola Longe',
+      status: 'ATIVA',
+      veiculo: { id: 1, placa: 'GVE1A23', modelo: 'Fiat Argo' },
+    };
+    const fetch = simularApi({
+      'GET /auth/me': () => json(200, { usuario: servidora }),
+      'GET /reservas/minhas': () => json(200, { reservas: [reserva] }),
+      'POST /reservas/1/cancelar': () => new Promise<Response>((r) => (responder = r)),
+    });
+    abrir('/');
+
+    const botao = await screen.findByRole<HTMLButtonElement>('button', {
+      name: /^Cancelar reserva de /,
+    });
+    fireEvent.click(botao);
+    await waitFor(() => expect(botao.disabled).toBe(true));
+    fireEvent.click(botao);
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+
+    responder(new Response(JSON.stringify({ reserva: { ...reserva, status: 'CANCELADA' } })));
+    expect(await screen.findByText('Cancelada')).toBeTruthy();
+  });
+
+  it('erro ao carregar não deixa "Carregando…" para sempre', async () => {
+    simularApi({
+      'GET /auth/me': () => json(200, { usuario: servidora }),
+      'GET /reservas/minhas': () =>
+        json(500, {
+          erro: { codigo: 'ERRO_INTERNO', mensagem: 'Erro inesperado. Tente novamente.' },
+        }),
+    });
+    abrir('/');
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.queryByText('Carregando…')).toBeNull();
+  });
 });
 
 describe('Minha conta', () => {

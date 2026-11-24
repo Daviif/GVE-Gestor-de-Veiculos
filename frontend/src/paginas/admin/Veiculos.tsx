@@ -1,13 +1,9 @@
 import { ROTULO_TURNO, veiculoSchema, type ReservaAfetada, type Veiculo } from '@gve/shared';
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, ErroApi } from '../../api';
+import { api, mensagemDe } from '../../api';
 import { useErrosDeCampo } from '../../componentes/errosDeCampo';
 import { dataComSemana } from '../../datas';
 import { useToast } from '../../toast/contexto';
-
-function mensagemDe(erro: unknown): string {
-  return erro instanceof ErroApi ? erro.message : 'Erro inesperado. Tente novamente.';
-}
 
 /** ABC1234 → ABC-1234 · ABC1D23 → ABC-1D23, como aparece na placa. */
 function placaComHifen(placa: string): string {

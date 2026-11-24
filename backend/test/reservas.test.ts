@@ -407,6 +407,33 @@ describe('POST /reservas/:id/cancelar', () => {
     expect(resposta.body.erro.codigo).toBe('JA_CANCELADA');
   });
 
+  it('RC10: dois cancelamentos ao mesmo tempo, só um vale e a auditoria tem um registro', async () => {
+    const { agente, usuario } = await entrarLogado();
+    const reserva = await criarReservaDe(usuario.id);
+
+    const respostas = await Promise.all([
+      agente.post(`/api/v1/reservas/${reserva.id}/cancelar`).send({}),
+      agente.post(`/api/v1/reservas/${reserva.id}/cancelar`).send({}),
+    ]);
+    expect(respostas.map((r) => r.status).sort()).toEqual([200, 409]);
+    expect(await prisma.logAuditoria.count({ where: { acao: 'RESERVA_CANCELADA' } })).toBe(1);
+  });
+
+  it('id maior que a coluna int4 responde 404, não 500', async () => {
+    const { agente } = await entrarLogado();
+    const resposta = await agente.post('/api/v1/reservas/99999999999/cancelar').send({});
+    expect(resposta.status).toBe(404);
+  });
+
+  it('data impossível na consulta responde 400, não 500', async () => {
+    const { agente } = await entrarLogado();
+    const resposta = await agente
+      .get('/api/v1/reservas/disponibilidade')
+      .query({ data: '2026-13-01', turno: 'MATUTINO' });
+    expect(resposta.status).toBe(400);
+    expect(resposta.body.erro.mensagem).toBe('Data inválida.');
+  });
+
   it('reserva inexistente responde 404', async () => {
     const { agente } = await entrarLogado();
     const resposta = await agente.post('/api/v1/reservas/9999/cancelar').send({});

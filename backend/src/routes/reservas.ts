@@ -1,13 +1,16 @@
 import {
+  ANTECEDENCIA_MAX,
+  ANTECEDENCIA_MIN,
   cancelamentoSchema,
   disponibilidadeQuerySchema,
+  idSchema,
   novaReservaSchema,
   turnoJaComecou,
   type Reserva,
   type VeiculoDisponivel,
 } from '@gve/shared';
 import { Router } from 'express';
-import { z } from 'zod';
+import { registrarAuditoria } from '../auditoria';
 import { deDataBanco, dentroDaJanela, janelaDeDatas, paraDataBanco, travarDatas } from '../datas';
 import { prisma } from '../db';
 import { Prisma } from '../generated/prisma/client';
@@ -37,7 +40,7 @@ async function validarData(data: string): Promise<void> {
     throw new ErroApi(
       422,
       'DATA_FORA_DA_JANELA',
-      'Escolha uma data entre 5 e 7 dias a partir de hoje.',
+      `Escolha uma data entre ${ANTECEDENCIA_MIN} e ${ANTECEDENCIA_MAX} dias a partir de hoje.`,
     );
   }
   if ((await feriadosEntre([data])).has(data)) {
@@ -91,7 +94,7 @@ rotasReservas.post('/', async (req, res) => {
     const reserva = await prisma.$transaction(async (tx) => {
       // O validarData acima pode ter visto a data antes de ela virar feriado: confere de novo
       // com a data travada, que o cadastro de feriado também trava (RN11).
-      await travarDatas(tx, [entrada.data]);
+      await travarDatas(tx, [entrada.data], 'compartilhado');
       if (await tx.feriado.findUnique({ where: { data: paraDataBanco(entrada.data) } })) {
         throw erroFeriado();
       }
@@ -113,20 +116,18 @@ rotasReservas.post('/', async (req, res) => {
         },
         select: { id: true, data: true, turno: true, destino: true, status: true },
       });
-      await tx.logAuditoria.create({
-        data: {
-          acao: 'RESERVA_CRIADA',
-          usuarioId: req.usuario!.id,
-          entidade: 'reserva',
-          entidadeId: criada.id,
-          detalhes: {
-            veiculoId: veiculo.id,
-            data: entrada.data,
-            turno: entrada.turno,
-            destino: entrada.destino,
-          },
-          ip: req.ip,
+      await registrarAuditoria(tx, {
+        acao: 'RESERVA_CRIADA',
+        usuarioId: req.usuario!.id,
+        entidade: 'reserva',
+        entidadeId: criada.id,
+        detalhes: {
+          veiculoId: veiculo.id,
+          data: entrada.data,
+          turno: entrada.turno,
+          destino: entrada.destino,
         },
+        ip: req.ip,
       });
       return criada;
     });
@@ -194,7 +195,7 @@ rotasReservas.get('/minhas', async (req, res) => {
  * cancela a reserva de outro deve informar o motivo (fica na auditoria, RF15).
  */
 rotasReservas.post('/:id/cancelar', async (req, res) => {
-  const idParam = z.coerce.number().int().positive().safeParse(req.params.id);
+  const idParam = idSchema.safeParse(req.params.id);
   const reserva = idParam.success
     ? await prisma.reserva.findUnique({
         where: { id: idParam.data },
@@ -241,13 +242,19 @@ rotasReservas.post('/:id/cancelar', async (req, res) => {
   }
 
   const atualizada = await prisma.$transaction(async (tx) => {
-    const r = await tx.reserva.update({
-      where: { id: reserva.id },
+    // RC10: o status conferido acima pode ter mudado (duplo clique, ou o veículo desativado
+    // ao mesmo tempo). Só cancela se ainda estiver ativa, para não gravar dois cancelamentos.
+    const { count } = await tx.reserva.updateMany({
+      where: { id: reserva.id, status: 'ATIVA' },
       data: {
         status: 'CANCELADA',
         canceladoEm: new Date(),
         canceladoPorId: usuario.id,
       },
+    });
+    if (count === 0) throw new ErroApi(409, 'JA_CANCELADA', 'Esta reserva já foi cancelada.');
+    const r = await tx.reserva.findUniqueOrThrow({
+      where: { id: reserva.id },
       select: {
         id: true,
         data: true,
@@ -257,21 +264,19 @@ rotasReservas.post('/:id/cancelar', async (req, res) => {
         veiculo: { select: { id: true, placa: true, modelo: true } },
       },
     });
-    await tx.logAuditoria.create({
-      data: {
-        acao: 'RESERVA_CANCELADA',
-        usuarioId: usuario.id,
-        entidade: 'reserva',
-        entidadeId: reserva.id,
-        detalhes: {
-          dono: reserva.usuarioId,
-          veiculoId: reserva.veiculo.id,
-          data: deDataBanco(reserva.data),
-          turno: reserva.turno,
-          ...(motivo ? { motivo } : {}),
-        },
-        ip: req.ip,
+    await registrarAuditoria(tx, {
+      acao: 'RESERVA_CANCELADA',
+      usuarioId: usuario.id,
+      entidade: 'reserva',
+      entidadeId: reserva.id,
+      detalhes: {
+        dono: reserva.usuarioId,
+        veiculoId: reserva.veiculo.id,
+        data: deDataBanco(reserva.data),
+        turno: reserva.turno,
+        ...(motivo ? { motivo } : {}),
       },
+      ip: req.ip,
     });
     return r;
   });

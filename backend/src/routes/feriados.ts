@@ -2,11 +2,13 @@ import {
   DESCRICAO_FERIADO_MAX,
   feriadoSchema,
   feriadosQuerySchema,
+  idSchema,
   importarFeriadosSchema,
   type Feriado,
 } from '@gve/shared';
 import { Router } from 'express';
 import { z } from 'zod';
+import { registrarAuditoria } from '../auditoria';
 import { config } from '../config';
 import { deDataBanco, hojeEmSaoPaulo, paraDataBanco, travarDatas } from '../datas';
 import { prisma } from '../db';
@@ -82,15 +84,13 @@ rotasFeriados.post('/', async (req, res) => {
         data: { ...entrada, data, criadoPorId: req.usuario!.id },
         select: campos,
       });
-      await tx.logAuditoria.create({
-        data: {
-          acao: 'FERIADO_CRIADO',
-          usuarioId: req.usuario!.id,
-          entidade: 'feriado',
-          entidadeId: criado.id,
-          detalhes: { data: entrada.data, descricao: entrada.descricao },
-          ip: req.ip,
-        },
+      await registrarAuditoria(tx, {
+        acao: 'FERIADO_CRIADO',
+        usuarioId: req.usuario!.id,
+        entidade: 'feriado',
+        entidadeId: criado.id,
+        detalhes: { data: entrada.data, descricao: entrada.descricao },
+        ip: req.ip,
       });
       const [resposta] = await paraResposta([criado], tx);
       return resposta;
@@ -106,26 +106,24 @@ rotasFeriados.post('/', async (req, res) => {
 });
 
 rotasFeriados.delete('/:id', async (req, res) => {
-  const id = z.coerce.number().int().positive().safeParse(req.params.id);
+  const id = idSchema.safeParse(req.params.id);
   const feriado = id.success
     ? await prisma.feriado.findUnique({ where: { id: id.data }, select: campos })
     : null;
   if (!feriado) throw new ErroApi(404, 'NAO_ENCONTRADO', 'Feriado não encontrado.');
 
-  await prisma.$transaction([
+  await prisma.$transaction(async (tx) => {
     // deleteMany: se outro administrador acabou de remover, não é erro.
-    prisma.feriado.deleteMany({ where: { id: feriado.id } }),
-    prisma.logAuditoria.create({
-      data: {
-        acao: 'FERIADO_REMOVIDO',
-        usuarioId: req.usuario!.id,
-        entidade: 'feriado',
-        entidadeId: feriado.id,
-        detalhes: { data: deDataBanco(feriado.data), descricao: feriado.descricao },
-        ip: req.ip,
-      },
-    }),
-  ]);
+    await tx.feriado.deleteMany({ where: { id: feriado.id } });
+    await registrarAuditoria(tx, {
+      acao: 'FERIADO_REMOVIDO',
+      usuarioId: req.usuario!.id,
+      entidade: 'feriado',
+      entidadeId: feriado.id,
+      detalhes: { data: deDataBanco(feriado.data), descricao: feriado.descricao },
+      ip: req.ip,
+    });
+  });
   res.status(204).end();
 });
 
@@ -171,18 +169,16 @@ rotasFeriados.post('/importar', async (req, res) => {
       skipDuplicates: true,
       select: campos,
     });
-    await tx.logAuditoria.create({
-      data: {
-        acao: 'FERIADOS_IMPORTADOS',
-        usuarioId: req.usuario!.id,
-        entidade: 'feriado',
-        detalhes: {
-          ano,
-          importados: criados.length,
-          ignorados: porData.size - criados.length,
-        },
-        ip: req.ip,
+    await registrarAuditoria(tx, {
+      acao: 'FERIADOS_IMPORTADOS',
+      usuarioId: req.usuario!.id,
+      entidade: 'feriado',
+      detalhes: {
+        ano,
+        importados: criados.length,
+        ignorados: porData.size - criados.length,
       },
+      ip: req.ip,
     });
     return paraResposta(
       criados.sort((x, y) => x.data.getTime() - y.data.getTime()),

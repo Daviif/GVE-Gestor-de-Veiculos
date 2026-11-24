@@ -1,6 +1,5 @@
 import {
-  ANTECEDENCIA_MAX,
-  ANTECEDENCIA_MIN,
+  dentroDaJanela,
   ROTULO_TURNO,
   TURNOS,
   type ReservaAgenda,
@@ -10,18 +9,26 @@ import {
 } from '@gve/shared';
 import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { api, ErroApi } from '../api';
+import { api, mensagemDe } from '../api';
 import { useSessao } from '../auth/contexto';
-import { diaComSemana, diaMes, hojeEmSaoPaulo, inicioDaSemana, somarDias } from '../datas';
+import {
+  diaComSemana,
+  diaMes,
+  diaSemanaCurto,
+  hojeEmSaoPaulo,
+  inicioDaSemana,
+  somarDias,
+} from '../datas';
 import type { PreenchimentoReserva } from './reservas/NovaReserva';
 
-function mensagemDe(erro: unknown): string {
-  return erro instanceof ErroApi ? erro.message : 'Erro inesperado. Tente novamente.';
-}
-
-const DIAS_SEMANA_CURTOS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
-
+/** Largura fixa do detalhe da reserva (o estilo da largura vai inline, junto da posição). */
 const LARGURA_POPOVER = 260;
+/** Altura que o detalhe ocupa com nome, destino e veículo; com menos espaço abaixo, abre acima. */
+const ALTURA_POPOVER = 150;
+/** Distância mínima entre o detalhe e a borda da janela. */
+const MARGEM_TELA = 8;
+/** Espaço entre o chip clicado e o detalhe. */
+const DISTANCIA_CHIP = 4;
 
 function primeiroNome(nome: string): string {
   return nome.split(' ')[0] ?? nome;
@@ -46,10 +53,13 @@ interface PopoverAberto {
 /** Onde o detalhe fica em relação ao chip: embaixo, ou em cima se faltar espaço na tela. */
 function posicionar(chip: Element): Omit<PopoverAberto, 'id'> {
   const caixa = chip.getBoundingClientRect();
-  const acima = window.innerHeight - caixa.bottom < 150;
+  const acima = window.innerHeight - caixa.bottom < ALTURA_POPOVER;
   return {
-    esquerda: Math.max(8, Math.min(caixa.left, window.innerWidth - LARGURA_POPOVER - 8)),
-    topo: acima ? caixa.top - 4 : caixa.bottom + 4,
+    esquerda: Math.max(
+      MARGEM_TELA,
+      Math.min(caixa.left, window.innerWidth - LARGURA_POPOVER - MARGEM_TELA),
+    ),
+    topo: acima ? caixa.top - DISTANCIA_CHIP : caixa.bottom + DISTANCIA_CHIP,
     acima,
   };
 }
@@ -145,11 +155,8 @@ export function Agenda() {
   const reservaDe = (v: VeiculoAgenda, dia: string, turno: Turno) =>
     reservaPorCelula.get(`${v.id}|${dia}|${turno}`);
 
-  /** RN02, RN03, RN11: só se reserva de D+5 a D+7 e fora de feriado. */
-  const podeReservar = (dia: string) =>
-    dia >= somarDias(hoje, ANTECEDENCIA_MIN) &&
-    dia <= somarDias(hoje, ANTECEDENCIA_MAX) &&
-    !feriadoPorDia.has(dia);
+  /** RN02, RN11: só dentro da janela de reserva e fora de feriado (a API confere de novo). */
+  const podeReservar = (dia: string) => dentroDaJanela(dia, hoje) && !feriadoPorDia.has(dia);
 
   /** Leva para a nova reserva já no passo 2, com data, turno e veículo escolhidos. */
   function reservar(v: VeiculoAgenda, dia: string, turno: Turno) {
@@ -237,7 +244,7 @@ export function Agenda() {
                   <div role="columnheader">
                     <span className="so-leitor">Veículo e turno</span>
                   </div>
-                  {dias.map((dia, i) => {
+                  {dias.map((dia) => {
                     const feriado = feriadoPorDia.get(dia);
                     const classe = [
                       'agenda-cabecalho',
@@ -249,7 +256,7 @@ export function Agenda() {
                     return (
                       <div key={dia} className={classe} role="columnheader">
                         <div className="agenda-cabecalho-dia">
-                          {DIAS_SEMANA_CURTOS[i]} {dia.slice(8, 10)}
+                          {diaSemanaCurto(dia)} {dia.slice(8, 10)}
                         </div>
                         <div className="agenda-cabecalho-feriado" title={feriado}>
                           {feriado ? 'Feriado' : ''}
@@ -360,7 +367,7 @@ export function Agenda() {
           {/* Celular: escolhe o dia e vê os veículos com os dois turnos */}
           <div className="so-celular pilha">
             <div className="agenda-dias-movel">
-              {dias.map((dia, i) => (
+              {dias.map((dia) => (
                 <button
                   key={dia}
                   type="button"
@@ -374,7 +381,7 @@ export function Agenda() {
                     .join(' ')}
                   onClick={() => setDiaEscolhido(dia)}
                 >
-                  <span className="agenda-dia-dow">{DIAS_SEMANA_CURTOS[i]}</span>
+                  <span className="agenda-dia-dow">{diaSemanaCurto(dia)}</span>
                   <span className="agenda-dia-num">{dia.slice(8, 10)}</span>
                 </button>
               ))}

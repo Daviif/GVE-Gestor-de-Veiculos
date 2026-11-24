@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { FUSO, hojeEmSaoPaulo, somarDias } from './datas';
+import { ID_MAX } from './ids';
 
 /** Turnos de reserva (RN04). */
 export const TURNOS = ['MATUTINO', 'VESPERTINO'] as const;
@@ -25,7 +27,7 @@ export function horarioDoTurno(turno: Turno): string {
 function agoraEmSaoPaulo(agora: Date): { data: string; minutos: number } {
   const partes = Object.fromEntries(
     new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Sao_Paulo',
+      timeZone: FUSO,
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -52,21 +54,54 @@ export function turnoJaComecou(data: string, turno: Turno, agora: Date = new Dat
   return hoje.minutos >= HORARIO_TURNO[turno].inicio * 60;
 }
 
+/** Situação de uma reserva vista pelo usuário: agendada, concluída ou cancelada. */
+export type SituacaoReserva = 'AGENDADA' | 'CONCLUIDA' | 'CANCELADA';
+
+/**
+ * RC02: a reserva ativa é agendada (futura) até o turno começar e concluída (passada) depois.
+ * Mesma linha de corte do cancelamento (RN05), para a tela nunca mostrar como "próxima" uma
+ * reserva que já não pode ser cancelada.
+ */
+export function situacaoDaReserva(
+  reserva: { status: 'ATIVA' | 'CANCELADA'; data: string; turno: Turno },
+  agora: Date = new Date(),
+): SituacaoReserva {
+  if (reserva.status === 'CANCELADA') return 'CANCELADA';
+  return turnoJaComecou(reserva.data, reserva.turno, agora) ? 'CONCLUIDA' : 'AGENDADA';
+}
+
 export const DESTINO_MAX = 200;
 
-/** RN02, RN03: a reserva é feita de 5 a 7 dias à frente. A API valida; a agenda usa para
- *  mostrar "+ reservar" só nas células em que a reserva é permitida. */
+/** RN02: a reserva é feita de 5 a 7 dias à frente. */
 export const ANTECEDENCIA_MIN = 5;
 export const ANTECEDENCIA_MAX = 7;
 
-/** 'YYYY-MM-DD' que existe no calendário (recusa 2026-02-31, que o Date viraria 03/03). */
+/** As datas da janela de reserva (RN02, D+5 a D+7), como 'YYYY-MM-DD'. */
+export function janelaDeDatas(hoje: string = hojeEmSaoPaulo()): string[] {
+  const datas: string[] = [];
+  for (let d = ANTECEDENCIA_MIN; d <= ANTECEDENCIA_MAX; d++) datas.push(somarDias(hoje, d));
+  return datas;
+}
+
+/**
+ * A data está dentro da janela (RN02)? A API valida com ela; a agenda usa a mesma para
+ * mostrar "+ reservar" só nas células em que a reserva é permitida.
+ */
+export function dentroDaJanela(data: string, hoje: string = hojeEmSaoPaulo()): boolean {
+  return janelaDeDatas(hoje).includes(data);
+}
+
+/**
+ * 'YYYY-MM-DD' que existe no calendário. Recusa 2026-02-31 (o Date viraria 03/03) e
+ * 2026-13-01 (o Date fica inválido e toISOString lançaria RangeError, virando erro 500).
+ */
 export const dataSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida.')
-  .refine(
-    (data) => new Date(`${data}T00:00:00.000Z`).toISOString().startsWith(data),
-    'Data inválida.',
-  );
+  .refine((data) => {
+    const dia = new Date(`${data}T00:00:00.000Z`);
+    return !Number.isNaN(dia.getTime()) && dia.toISOString().startsWith(data);
+  }, 'Data inválida.');
 
 /** Nova reserva (RF06). Validado igual no formulário e na API. */
 export const novaReservaSchema = z.object({
@@ -75,7 +110,8 @@ export const novaReservaSchema = z.object({
   veiculoId: z.coerce
     .number({ error: 'Selecione o veículo.' })
     .int()
-    .positive('Selecione o veículo.'),
+    .positive('Selecione o veículo.')
+    .max(ID_MAX, 'Selecione o veículo.'),
   destino: z
     .string()
     .trim()

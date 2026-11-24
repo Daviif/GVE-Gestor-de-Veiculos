@@ -1,7 +1,7 @@
-import { situacaoUsuarioSchema, usuarioSchema, type Usuario } from '@gve/shared';
+import { idSchema, situacaoUsuarioSchema, usuarioSchema, type Usuario } from '@gve/shared';
 import { Router } from 'express';
 import { randomInt } from 'node:crypto';
-import { z } from 'zod';
+import { registrarAuditoria } from '../auditoria';
 import { prisma } from '../db';
 import { Prisma } from '../generated/prisma/client';
 import { autenticar, exigirPerfil } from '../middleware/autenticacao';
@@ -37,7 +37,7 @@ function gerarSenhaProvisoria(): string {
 
 /** Busca o usuário do :id da rota ou responde 404. */
 async function buscarUsuario(idParam: unknown): Promise<Usuario> {
-  const id = z.coerce.number().int().positive().safeParse(idParam);
+  const id = idSchema.safeParse(idParam);
   const usuario = id.success
     ? await prisma.usuario.findUnique({ where: { id: id.data }, select: campos })
     : null;
@@ -63,6 +63,28 @@ async function verificarConflito(
     throw new ErroApi(409, 'CPF_DUPLICADO', 'Já existe um usuário com esse CPF.', 'cpf');
   }
   throw new ErroApi(409, 'EMAIL_DUPLICADO', 'Já existe um usuário com esse e-mail.', 'email');
+}
+
+/**
+ * RC09: o sistema nunca fica sem administrador ativo. A trava única serializa as mudanças de
+ * perfil e de situação, para dois administradores não se rebaixarem um ao outro ao mesmo tempo
+ * e zerarem a conta. Chamar antes de travarConta, sempre nessa ordem.
+ */
+async function garantirOutroAdministrador(
+  tx: Prisma.TransactionClient,
+  quemSai: number,
+): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('administradores'))`;
+  const restantes = await tx.usuario.count({
+    where: { perfil: 'ADMINISTRADOR', ativo: true, id: { not: quemSai } },
+  });
+  if (restantes === 0) {
+    throw new ErroApi(
+      409,
+      'ULTIMO_ADMINISTRADOR',
+      'O sistema precisa de pelo menos um administrador ativo.',
+    );
+  }
 }
 
 /** Rede de segurança para a corrida entre dois cadastros simultâneos (o índice único do banco). */
@@ -91,15 +113,13 @@ rotasUsuarios.post('/', async (req, res) => {
         data: { ...entrada, senhaHash: await gerarHashSenha(senhaProvisoria) },
         select: campos,
       });
-      await tx.logAuditoria.create({
-        data: {
-          acao: 'USUARIO_CRIADO',
-          usuarioId: req.usuario!.id,
-          entidade: 'usuario',
-          entidadeId: criado.id,
-          detalhes: { nome: entrada.nome, email: entrada.email, perfil: entrada.perfil },
-          ip: req.ip,
-        },
+      await registrarAuditoria(tx, {
+        acao: 'USUARIO_CRIADO',
+        usuarioId: req.usuario!.id,
+        entidade: 'usuario',
+        entidadeId: criado.id,
+        detalhes: { nome: entrada.nome, email: entrada.email, perfil: entrada.perfil },
+        ip: req.ip,
       });
       return criado;
     });
@@ -114,26 +134,35 @@ rotasUsuarios.put('/:id', async (req, res) => {
   const anterior = await buscarUsuario(req.params.id);
   const entrada = usuarioSchema.parse(req.body);
 
+  // RC09: rebaixar a si mesmo deixaria a tela aberta como administrador sem poder sê-lo.
+  if (anterior.id === req.usuario!.id && entrada.perfil !== anterior.perfil) {
+    throw new ErroApi(
+      409,
+      'OPERACAO_INVALIDA',
+      'Você não pode alterar o seu próprio perfil.',
+      'perfil',
+    );
+  }
+
   try {
     const usuario = await prisma.$transaction(async (tx) => {
+      if (entrada.perfil !== 'ADMINISTRADOR') await garantirOutroAdministrador(tx, anterior.id);
       await verificarConflito(tx, entrada, anterior.id);
       const editado = await tx.usuario.update({
         where: { id: anterior.id },
         data: entrada,
         select: campos,
       });
-      await tx.logAuditoria.create({
-        data: {
-          acao: 'USUARIO_EDITADO',
-          usuarioId: req.usuario!.id,
-          entidade: 'usuario',
-          entidadeId: anterior.id,
-          detalhes: {
-            antes: { nome: anterior.nome, email: anterior.email, perfil: anterior.perfil },
-            depois: { nome: entrada.nome, email: entrada.email, perfil: entrada.perfil },
-          },
-          ip: req.ip,
+      await registrarAuditoria(tx, {
+        acao: 'USUARIO_EDITADO',
+        usuarioId: req.usuario!.id,
+        entidade: 'usuario',
+        entidadeId: anterior.id,
+        detalhes: {
+          antes: { nome: anterior.nome, email: anterior.email, perfil: anterior.perfil },
+          depois: { nome: entrada.nome, email: entrada.email, perfil: entrada.perfil },
         },
+        ip: req.ip,
       });
       return editado;
     });
@@ -152,29 +181,27 @@ rotasUsuarios.patch('/:id/situacao', async (req, res) => {
   if (!ativo && atual.id === req.usuario!.id) {
     throw new ErroApi(409, 'OPERACAO_INVALIDA', 'Você não pode desativar o seu próprio acesso.');
   }
-  if (atual.ativo === ativo) {
-    res.json({ usuario: atual });
-    return;
-  }
-
   const usuario = await prisma.$transaction(async (tx) => {
+    if (!ativo) await garantirOutroAdministrador(tx, atual.id);
     // Espera um login em andamento terminar, para a sessão que ele abrir também cair.
     await travarConta(tx, atual.id);
+    // RC10: relido com a conta travada, para um duplo clique não gravar a mudança duas vezes.
+    const agora = await tx.usuario.findUniqueOrThrow({ where: { id: atual.id }, select: campos });
+    if (agora.ativo === ativo) return agora;
+
     const atualizado = await tx.usuario.update({
       where: { id: atual.id },
       data: { ativo },
       select: campos,
     });
     if (!ativo) await tx.sessao.deleteMany({ where: { usuarioId: atual.id } });
-    await tx.logAuditoria.create({
-      data: {
-        acao: ativo ? 'USUARIO_ATIVADO' : 'USUARIO_DESATIVADO',
-        usuarioId: req.usuario!.id,
-        entidade: 'usuario',
-        entidadeId: atual.id,
-        detalhes: { nome: atual.nome },
-        ip: req.ip,
-      },
+    await registrarAuditoria(tx, {
+      acao: ativo ? 'USUARIO_ATIVADO' : 'USUARIO_DESATIVADO',
+      usuarioId: req.usuario!.id,
+      entidade: 'usuario',
+      entidadeId: atual.id,
+      detalhes: { nome: atual.nome },
+      ip: req.ip,
     });
     return atualizado;
   });
@@ -196,15 +223,13 @@ rotasUsuarios.post('/:id/redefinir-senha', async (req, res) => {
     });
     // A senha antiga não vale mais: encerra as sessões abertas.
     await tx.sessao.deleteMany({ where: { usuarioId: usuario.id } });
-    await tx.logAuditoria.create({
-      data: {
-        acao: 'SENHA_REDEFINIDA',
-        usuarioId: req.usuario!.id,
-        entidade: 'usuario',
-        entidadeId: usuario.id,
-        detalhes: { nome: usuario.nome },
-        ip: req.ip,
-      },
+    await registrarAuditoria(tx, {
+      acao: 'SENHA_REDEFINIDA',
+      usuarioId: req.usuario!.id,
+      entidade: 'usuario',
+      entidadeId: usuario.id,
+      detalhes: { nome: usuario.nome },
+      ip: req.ip,
     });
   });
   res.json({ senhaProvisoria });

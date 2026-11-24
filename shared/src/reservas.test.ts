@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { horarioDoTurno, novaReservaSchema, turnoJaComecou } from './index';
+import {
+  dataSchema,
+  horarioDoTurno,
+  novaReservaSchema,
+  situacaoDaReserva,
+  turnoJaComecou,
+} from './index';
 
 // Horários de Brasília (UTC-3) escritos em UTC: 07:00 BRT = 10:00Z, 13:00 BRT = 16:00Z.
 const em = (iso: string) => new Date(iso);
@@ -51,5 +57,40 @@ describe('nova reserva', () => {
         'Informe o destino.',
       );
     }
+  });
+});
+
+describe('dataSchema', () => {
+  it.each(['2026-02-31', '2026-13-01', '2026-00-10', '2026-01-00', '2026-01-32'])(
+    'recusa %s sem lançar exceção',
+    (data) => {
+      expect(dataSchema.safeParse(data).success).toBe(false);
+    },
+  );
+
+  it('aceita 29/02 só em ano bissexto', () => {
+    expect(dataSchema.safeParse('2028-02-29').success).toBe(true);
+    expect(dataSchema.safeParse('2026-02-29').success).toBe(false);
+  });
+});
+
+describe('situacaoDaReserva (RC02)', () => {
+  const hoje = { status: 'ATIVA' as const, data: '2026-11-05', turno: 'MATUTINO' as const };
+
+  it('a de hoje é agendada até o turno começar e concluída depois', () => {
+    expect(situacaoDaReserva(hoje, em('2026-11-05T09:59:00Z'))).toBe('AGENDADA');
+    expect(situacaoDaReserva(hoje, em('2026-11-05T10:00:00Z'))).toBe('CONCLUIDA');
+  });
+
+  it('a de ontem é concluída e a de amanhã, agendada', () => {
+    const agora = em('2026-11-05T12:00:00Z');
+    expect(situacaoDaReserva({ ...hoje, data: '2026-11-04' }, agora)).toBe('CONCLUIDA');
+    expect(situacaoDaReserva({ ...hoje, data: '2026-11-06' }, agora)).toBe('AGENDADA');
+  });
+
+  it('cancelada vale mais que a data', () => {
+    expect(situacaoDaReserva({ ...hoje, status: 'CANCELADA' }, em('2026-11-01T00:00:00Z'))).toBe(
+      'CANCELADA',
+    );
   });
 });
