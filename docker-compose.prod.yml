@@ -1,0 +1,88 @@
+# Produção do GVE atrás do Caddy do servidor (que cuida de 80/443 e do HTTPS).
+# Só o "web" publica porta, e só em 127.0.0.1:8001: o Caddy repassa o domínio para ela.
+# A API e o banco ficam em rede interna, sem porta publicada.
+#
+#   cp .env.production.example .env.production   # e preencha as senhas
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#   docker compose -f docker-compose.prod.yml --env-file .env.production run --rm migrar
+#   docker compose -f docker-compose.prod.yml --env-file .env.production run --rm migrar npm run db:seed -w backend
+name: gve-prod
+
+services:
+  db:
+    image: postgres:16.15-alpine3.24
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gve}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-gve}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks: [interna]
+    healthcheck:
+      # TCP (-h 127.0.0.1): pelo socket o pg_isready responde no servidor temporário do init.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: final
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_PORT: 3333
+      DATABASE_URL: postgresql://${POSTGRES_USER:-gve}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-gve}
+    depends_on:
+      db:
+        condition: service_healthy
+    # "interna" para falar com o banco; "default" porque a API precisa sair para a BrasilAPI (feriados).
+    networks: [interna, default]
+    read_only: true
+    tmpfs: ['/tmp:size=64m']
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    depends_on: [api]
+    ports:
+      - '127.0.0.1:8001:8080'
+    networks: [default]
+    read_only: true
+    tmpfs: ['/tmp:size=64m']
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+
+  # Ferramenta pontual (não sobe com o "up"): migrações e seed.
+  migrar:
+    profiles: ['ferramentas']
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: build
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-gve}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-gve}
+      SEED_ADMIN_NOME: ${SEED_ADMIN_NOME:-Administrador}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      SEED_ADMIN_CPF: ${SEED_ADMIN_CPF:-}
+      SEED_ADMIN_SENHA: ${SEED_ADMIN_SENHA:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [interna]
+
+networks:
+  # Sem acesso à internet: o banco só conversa com a API.
+  interna:
+    internal: true
+
+volumes:
+  db-data:
