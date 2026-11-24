@@ -15,6 +15,13 @@ export class ErroApi extends Error {
   }
 }
 
+const ERRO_INESPERADO = 'Erro inesperado. Tente novamente.';
+
+/** Mensagem para mostrar ao usuário a partir de qualquer erro capturado numa tela. */
+export function mensagemDe(erro: unknown): string {
+  return erro instanceof ErroApi ? erro.message : ERRO_INESPERADO;
+}
+
 /** Disparado quando a API responde 401: a sessão venceu (RNF11) ou foi encerrada. */
 export const EVENTO_SESSAO_EXPIRADA = 'gve:sessao-expirada';
 
@@ -42,7 +49,7 @@ export async function api<T>(caminho: string, opcoes: { metodo?: string; corpo?:
   throw new ErroApi(
     resposta.status,
     erro?.codigo ?? 'ERRO_INTERNO',
-    erro?.mensagem ?? 'Erro inesperado. Tente novamente.',
+    erro?.mensagem ?? ERRO_INESPERADO,
     erro?.campo,
   );
 }

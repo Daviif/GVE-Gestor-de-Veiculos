@@ -1,5 +1,6 @@
 import { loginSchema, normalizarLogin, trocaSenhaSchema, type UsuarioSessao } from '@gve/shared';
 import { Router } from 'express';
+import { createHash } from 'node:crypto';
 import { MemoryStore, rateLimit } from 'express-rate-limit';
 import { registrarAuditoria } from '../auditoria';
 import { prisma } from '../db';
@@ -52,6 +53,30 @@ const limitarFalhasPorIp = rateLimit({
 
 const CREDENCIAIS_INVALIDAS = 'E-mail/CPF ou senha incorretos.';
 
+function erroBloqueio(liberaEm: Date, agora: number): ErroApi {
+  const minutos = Math.max(1, Math.ceil((liberaEm.getTime() - agora) / 60_000));
+  return new ErroApi(
+    429,
+    'LOGIN_BLOQUEADO',
+    `Muitas tentativas sem sucesso. Tente novamente em ${minutos} min.`,
+  );
+}
+
+/**
+ * O que vai para a auditoria quando o login digitado não existe. E-mail ou CPF bem formados
+ * ficam legíveis (mostram quem está sendo atacado); qualquer outra coisa pode ser a senha
+ * digitada no campo errado, então só o hash é gravado. É determinístico: a contagem de
+ * falhas por login inexistente (bloqueadoAte) continua funcionando.
+ */
+function loginParaAuditoria(login: { tipo: 'email' | 'cpf'; valor: string }): string {
+  const bemFormado =
+    login.tipo === 'email'
+      ? /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(login.valor)
+      : login.valor.length === 11;
+  if (bemFormado) return login.valor;
+  return `sha256:${createHash('sha256').update(login.valor).digest('hex')}`;
+}
+
 // Conferido quando o login não existe, para a resposta levar o mesmo tempo (não revela quem tem cadastro).
 let hashFicticio: Promise<string> | undefined;
 
@@ -70,7 +95,7 @@ function paraSessao(usuario: Usuario): UsuarioSessao {
 /** Quando o login fica liberado de novo, ou null se não está bloqueado. */
 async function bloqueadoAte(
   tx: Prisma.TransactionClient,
-  usuario: Usuario | null,
+  usuario: Pick<Usuario, 'id'> | null,
   login: string,
   agora: number,
 ): Promise<Date | null> {
@@ -115,13 +140,23 @@ rotasAuth.post('/login', limitarFalhasPorIp, async (req, res) => {
   const encontrado = login.valor
     ? await prisma.usuario.findUnique({
         where: login.tipo === 'email' ? { email: login.valor } : { cpf: login.valor },
-        select: { id: true },
+        select: { id: true, senhaHash: true },
       })
     : null;
+  const loginAuditado = loginParaAuditoria(login);
+
+  // O Argon2 (19 MiB, centenas de ms) roda antes da transação: dentro dela prenderia uma
+  // conexão do pool enquanto calcula, e um pico de logins pararia o resto da API.
+  // Login inexistente confere um hash fictício, para a resposta levar o mesmo tempo.
+  hashFicticio ??= gerarHashSenha('senha-ficticia');
+  const senhaConfere = await conferirSenha(
+    encontrado?.senhaHash ?? (await hashFicticio),
+    entrada.senha,
+  );
 
   // Tentativas na mesma conta (ou no mesmo login inexistente) passam uma de cada vez:
-  // conferir o bloqueio, testar a senha e gravar a falha ou abrir a sessão é atômico.
-  // Sem isso, várias tentativas em paralelo veriam a contagem antiga e passariam do limite.
+  // conferir o bloqueio, decidir e gravar a falha ou abrir a sessão é atômico. Sem isso,
+  // várias tentativas em paralelo veriam a contagem antiga e passariam do limite.
   const resultado = await prisma.$transaction(
     async (tx) => {
       await travarConta(tx, encontrado?.id ?? login.valor);
@@ -132,40 +167,22 @@ rotasAuth.post('/login', limitarFalhasPorIp, async (req, res) => {
         : null;
 
       const falha = async (motivo: string, erroApi: ErroApi) => {
-        await tx.logAuditoria.create({
-          data: {
-            acao: 'LOGIN_FALHA',
-            usuarioId: usuario?.id ?? null,
-            detalhes: usuario ? { motivo } : { motivo, login: login.valor },
-            ip: req.ip,
-          },
+        await registrarAuditoria(tx, {
+          acao: 'LOGIN_FALHA',
+          usuarioId: usuario?.id ?? null,
+          detalhes: usuario ? { motivo } : { motivo, login: loginAuditado },
+          ip: req.ip,
         });
         return { erro: erroApi };
       };
 
-      const liberaEm = await bloqueadoAte(tx, usuario, login.valor, agora);
-      if (liberaEm) {
-        const minutos = Math.max(1, Math.ceil((liberaEm.getTime() - agora) / 60_000));
-        return falha(
-          'BLOQUEADO',
-          new ErroApi(
-            429,
-            'LOGIN_BLOQUEADO',
-            `Muitas tentativas sem sucesso. Tente novamente em ${minutos} min.`,
-          ),
-        );
-      }
+      // O bloqueio é conferido antes de usar o resultado da senha: bloqueado, nem a certa entra.
+      const liberaEm = await bloqueadoAte(tx, usuario, loginAuditado, agora);
+      if (liberaEm) return falha('BLOQUEADO', erroBloqueio(liberaEm, agora));
 
-      if (!usuario) {
-        hashFicticio ??= gerarHashSenha('senha-ficticia');
-        await conferirSenha(await hashFicticio, entrada.senha);
-        return falha(
-          'CREDENCIAIS',
-          new ErroApi(401, 'CREDENCIAIS_INVALIDAS', CREDENCIAIS_INVALIDAS),
-        );
-      }
-
-      if (!(await conferirSenha(usuario.senhaHash, entrada.senha))) {
+      // Senha redefinida enquanto esta tentativa esperava a trava: o que foi conferido
+      // antes era o hash antigo e não vale mais.
+      if (!usuario || !senhaConfere || usuario.senhaHash !== encontrado?.senhaHash) {
         return falha(
           'CREDENCIAIS',
           new ErroApi(401, 'CREDENCIAIS_INVALIDAS', CREDENCIAIS_INVALIDAS),
@@ -185,11 +202,12 @@ rotasAuth.post('/login', limitarFalhasPorIp, async (req, res) => {
       }
 
       // Gravado ainda com o lock: zera a contagem antes da próxima tentativa.
-      await tx.logAuditoria.create({ data: { acao: 'LOGIN', usuarioId: usuario.id, ip: req.ip } });
+      await registrarAuditoria(tx, { acao: 'LOGIN', usuarioId: usuario.id, ip: req.ip });
       // Também com o lock: uma redefinição de senha na fila encerra esta sessão junto com as outras.
       return { usuario, token: await abrirSessao(usuario.id, tx) };
     },
     // Tentativas na fila esperam o lock dentro da transação; o padrão de 5 s é curto para isso.
+    // Com o Argon2 fora, cada uma segura a trava só pelo tempo de algumas consultas.
     { maxWait: 10_000, timeout: 30_000 },
   );
   // O erro sai depois do commit, para a falha ficar gravada.
@@ -203,7 +221,7 @@ rotasAuth.post('/login', limitarFalhasPorIp, async (req, res) => {
 rotasAuth.post('/logout', async (req, res) => {
   const token = lerTokenSessao(req);
   const usuarioId = token ? await encerrarSessao(token) : null;
-  if (usuarioId) await registrarAuditoria({ acao: 'LOGOUT', usuarioId, ip: req.ip });
+  if (usuarioId) await registrarAuditoria(prisma, { acao: 'LOGOUT', usuarioId, ip: req.ip });
   apagarCookieSessao(res);
   res.status(204).end();
 });
@@ -215,16 +233,12 @@ rotasAuth.get('/me', autenticar({ permitirTrocaPendente: true }), (req, res) => 
 rotasAuth.put('/senha', autenticar({ permitirTrocaPendente: true }), async (req, res) => {
   const entrada = trocaSenhaSchema.parse(req.body);
   const usuario = req.usuario!;
+  const agora = Date.now();
 
+  // Argon2 antes da transação, como no login (não prende conexão enquanto calcula).
+  let senhaAtualConfere: boolean | undefined;
   if (entrada.senhaAtual !== undefined) {
-    if (!(await conferirSenha(usuario.senhaHash, entrada.senhaAtual))) {
-      throw new ErroApi(
-        400,
-        'SENHA_ATUAL_INCORRETA',
-        'A senha atual está incorreta.',
-        'senhaAtual',
-      );
-    }
+    senhaAtualConfere = await conferirSenha(usuario.senhaHash, entrada.senhaAtual);
   } else if (usuario.trocaSenhaObrigatoria) {
     // Primeiro acesso: acabou de entrar com a senha temporária, que não pode ser reaproveitada.
     if (await conferirSenha(usuario.senhaHash, entrada.novaSenha)) {
@@ -238,20 +252,57 @@ rotasAuth.put('/senha', autenticar({ permitirTrocaPendente: true }), async (req,
   } else {
     throw new ErroApi(400, 'ENTRADA_INVALIDA', 'Informe a senha atual.');
   }
+  const senhaHash = senhaAtualConfere === false ? null : await gerarHashSenha(entrada.novaSenha);
 
-  const senhaHash = await gerarHashSenha(entrada.novaSenha);
-  const atualizado = await prisma.$transaction(async (tx) => {
+  const resultado = await prisma.$transaction(async (tx) => {
     await travarConta(tx, usuario.id);
+    const atual = await tx.usuario.findUniqueOrThrow({ where: { id: usuario.id } });
+
+    // RC06: quem roubou o cookie não pode adivinhar a senha atual aqui sem limite. Errar
+    // conta como falha de login; chegando ao bloqueio, todas as sessões da conta caem.
+    const bloquear = async (liberaEm: Date) => {
+      await tx.sessao.deleteMany({ where: { usuarioId: usuario.id } });
+      return { erro: erroBloqueio(liberaEm, agora), sessaoEncerrada: true };
+    };
+    const jaBloqueado = await bloqueadoAte(tx, atual, '', agora);
+    if (jaBloqueado) return bloquear(jaBloqueado);
+
+    const errou =
+      senhaAtualConfere !== undefined &&
+      (!senhaAtualConfere || atual.senhaHash !== usuario.senhaHash);
+    if (errou || !senhaHash) {
+      await registrarAuditoria(tx, {
+        acao: 'LOGIN_FALHA',
+        usuarioId: usuario.id,
+        detalhes: { motivo: 'SENHA_ATUAL' },
+        ip: req.ip,
+      });
+      const liberaEm = await bloqueadoAte(tx, atual, '', agora);
+      if (liberaEm) return bloquear(liberaEm);
+      return {
+        erro: new ErroApi(
+          400,
+          'SENHA_ATUAL_INCORRETA',
+          'A senha atual está incorreta.',
+          'senhaAtual',
+        ),
+        sessaoEncerrada: false,
+      };
+    }
+
     const salvo = await tx.usuario.update({
       where: { id: usuario.id },
       data: { senhaHash, trocaSenhaObrigatoria: false },
     });
     // Encerra as outras sessões abertas com a senha antiga.
     await tx.sessao.deleteMany({ where: { usuarioId: usuario.id, id: { not: req.sessaoId } } });
-    await tx.logAuditoria.create({
-      data: { acao: 'SENHA_ALTERADA', usuarioId: usuario.id, ip: req.ip },
-    });
-    return salvo;
+    await registrarAuditoria(tx, { acao: 'SENHA_ALTERADA', usuarioId: usuario.id, ip: req.ip });
+    return { usuario: salvo };
   });
-  res.json({ usuario: paraSessao(atualizado) });
+  // O erro sai depois do commit, para a falha ficar gravada.
+  if ('erro' in resultado) {
+    if (resultado.sessaoEncerrada) apagarCookieSessao(res);
+    throw resultado.erro;
+  }
+  res.json({ usuario: paraSessao(resultado.usuario) });
 });

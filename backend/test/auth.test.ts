@@ -141,6 +141,15 @@ describe('POST /auth/login', () => {
     expect(resposta.body.erro.mensagem).toBe('E-mail ou CPF longo demais.');
     expect(await prisma.logAuditoria.count()).toBe(0);
   });
+
+  it('login inexistente que não parece e-mail nem CPF vai para o log só como hash', async () => {
+    // Quem digita a senha no campo do login não pode deixá-la em texto puro na auditoria.
+    await entrar('MinhaSenha#2026', 'qualquer');
+    const falha = await prisma.logAuditoria.findFirstOrThrow({ where: { acao: 'LOGIN_FALHA' } });
+    const login = (falha.detalhes as { login: string }).login;
+    expect(login).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(JSON.stringify(falha.detalhes)).not.toContain('2026');
+  });
 });
 
 describe('bloqueio após 5 tentativas em 15 min', () => {
@@ -351,6 +360,36 @@ describe('PUT /auth/senha', () => {
     expect(resposta.status).toBe(400);
     expect(resposta.body.erro.codigo).toBe('SENHA_ATUAL_INCORRETA');
     expect(resposta.body.erro.campo).toBe('senhaAtual');
+  });
+
+  it('RC06: errar a senha atual conta como falha de login', async () => {
+    const ana = await criarUsuario({});
+    const { agente } = await entrar();
+    await agente
+      .put('/api/v1/auth/senha')
+      .send({ senhaAtual: 'errada', novaSenha: 'nova-senha-456' });
+    const falha = await prisma.logAuditoria.findFirstOrThrow({ where: { acao: 'LOGIN_FALHA' } });
+    expect(falha).toMatchObject({ usuarioId: ana.id, detalhes: { motivo: 'SENHA_ATUAL' } });
+  });
+
+  it('RC06: na 5ª senha atual errada a conta bloqueia e todas as sessões caem', async () => {
+    const ana = await criarUsuario({});
+    const { agente } = await entrar();
+    await entrar(); // outra sessão aberta, em outro aparelho
+
+    const tentar = () =>
+      agente.put('/api/v1/auth/senha').send({ senhaAtual: 'errada', novaSenha: 'nova-senha-456' });
+    for (let i = 0; i < 4; i++) expect((await tentar()).status).toBe(400);
+    const quinta = await tentar();
+    expect(quinta.status).toBe(429);
+    expect(quinta.body.erro.codigo).toBe('LOGIN_BLOQUEADO');
+    const cookies = quinta.headers['set-cookie'] as unknown as string[];
+    // O último Set-Cookie vale: o middleware renovou antes, a rota apagou depois.
+    expect(cookies.at(-1)).toMatch(/^gve_sessao=;/);
+    expect(await prisma.sessao.count({ where: { usuarioId: ana.id } })).toBe(0);
+
+    // Nem a senha certa entra enquanto durar o bloqueio.
+    expect((await entrar()).resposta.status).toBe(429);
   });
 
   it('exige sessão', async () => {

@@ -6,14 +6,10 @@ import {
   type Feriado,
 } from '@gve/shared';
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, ErroApi } from '../../api';
+import { api, mensagemDe } from '../../api';
 import { useErrosDeCampo } from '../../componentes/errosDeCampo';
 import { useToast } from '../../toast/contexto';
 import { anoAtual, dataCurta, diaDaSemana, diaMes } from '../../datas';
-
-function mensagemDe(erro: unknown): string {
-  return erro instanceof ErroApi ? erro.message : 'Erro inesperado. Tente novamente.';
-}
 
 function plural(n: number, singular: string, plural: string): string {
   return `${n} ${n === 1 ? singular : plural}`;

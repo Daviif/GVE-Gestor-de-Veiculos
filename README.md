@@ -45,8 +45,11 @@ Todo PR para `dev` ou `main` passa pelo CI (`.github/workflows/ci.yml`): formata
 ```
 backend/    API REST (Express + TypeScript)
 frontend/   Interface (React + Vite + TypeScript)
-shared/     Esquemas Zod e tipos usados pelos dois
+shared/     Esquemas Zod, tipos e regras de negócio usados pelos dois
+docs/       Requisitos (RF, RN, RNF e regras complementares da equipe)
 ```
+
+Os códigos citados nos comentários do código (RF01, RN05, RNF11, RC02…) estão em [`docs/requisitos.md`](docs/requisitos.md). Regra nova ou alterada entra lá primeiro, com teste próprio.
 
 ## Pré-requisitos
 

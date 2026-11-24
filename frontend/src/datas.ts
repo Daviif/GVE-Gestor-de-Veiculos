@@ -2,9 +2,14 @@
 // Para exibir, o dia vira meia-noite UTC e é formatado em UTC: assim nunca "volta um dia"
 // por causa do fuso do navegador.
 
-const FUSO = 'America/Sao_Paulo';
+import { hojeEmSaoPaulo, somarDias } from '@gve/shared';
+
+// Implementação única no shared (a API usa as mesmas); reexportadas para as telas terem um
+// só lugar de onde importar datas.
+export { hojeEmSaoPaulo, somarDias };
 
 const DIAS_DA_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+const DIAS_DA_SEMANA_CURTOS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 function paraDate(data: string): Date {
   return new Date(`${data}T00:00:00.000Z`);
@@ -14,21 +19,9 @@ function formatar(data: string, opcoes: Intl.DateTimeFormatOptions): string {
   return new Intl.DateTimeFormat('pt-BR', { ...opcoes, timeZone: 'UTC' }).format(paraDate(data));
 }
 
-/** 'YYYY-MM-DD' do dia atual em São Paulo. */
-export function hojeEmSaoPaulo(agora: Date = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: FUSO }).format(agora);
-}
-
 /** Ano atual em São Paulo. */
 export function anoAtual(agora: Date = new Date()): number {
   return Number(hojeEmSaoPaulo(agora).slice(0, 4));
-}
-
-/** 'YYYY-MM-DD' deslocado em `dias` (positivos ou negativos). */
-export function somarDias(data: string, dias: number): string {
-  const d = paraDate(data);
-  d.setUTCDate(d.getUTCDate() + dias);
-  return d.toISOString().slice(0, 10);
 }
 
 /** Segunda-feira que começa a semana da data. */
@@ -65,4 +58,27 @@ export function dataLonga(data: string): string {
 /** '2026-10-20' → 'Terça'. */
 export function diaDaSemana(data: string): string {
   return DIAS_DA_SEMANA[paraDate(data).getUTCDay()]!;
+}
+
+/** '2026-10-20' → 'Ter'. */
+export function diaSemanaCurto(data: string): string {
+  return DIAS_DA_SEMANA_CURTOS[paraDate(data).getUTCDay()]!;
+}
+
+/** '2026-10-20' → '2026-10-01'. */
+export function primeiroDoMes(data: string): string {
+  return `${data.slice(0, 7)}-01`;
+}
+
+/** '2026-02-10' → '2026-02-28'. */
+export function ultimoDoMes(data: string): string {
+  const d = paraDate(data);
+  d.setUTCMonth(d.getUTCMonth() + 1, 0);
+  return d.toISOString().slice(0, 10);
+}
+
+/** '2026-10-20' → 'Outubro de 2026'. */
+export function mesPorExtenso(data: string): string {
+  const nome = formatar(data, { month: 'long', year: 'numeric' });
+  return nome.charAt(0).toUpperCase() + nome.slice(1);
 }

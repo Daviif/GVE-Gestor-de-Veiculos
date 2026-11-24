@@ -1,4 +1,5 @@
 import {
+  DESTINO_MAX,
   errosPorCampo,
   horarioDoTurno,
   novaReservaSchema,
@@ -10,9 +11,9 @@ import {
 } from '@gve/shared';
 import { useEffect, useState, type MouseEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { api, ErroApi } from '../../api';
+import { api, ErroApi, mensagemDe } from '../../api';
 import { useErrosDeCampo } from '../../componentes/errosDeCampo';
-import { dataLonga, diaComSemana } from '../../datas';
+import { dataLonga, diaComSemana, diaMes, diaSemanaCurto } from '../../datas';
 import { useToast } from '../../toast/contexto';
 
 /** Escolha vinda da agenda ("+ reservar" numa célula livre): abre direto no passo 2. */
@@ -26,29 +27,12 @@ function lerPreenchimento(state: unknown): PreenchimentoReserva | null {
   if (typeof state !== 'object' || state === null) return null;
   const { data, turno, veiculoId } = state as Record<string, unknown>;
   if (typeof data !== 'string' || typeof veiculoId !== 'number') return null;
-  if (turno !== 'MATUTINO' && turno !== 'VESPERTINO') return null;
-  return { data, turno, veiculoId };
+  if (!TURNOS.includes(turno as Turno)) return null;
+  return { data, turno: turno as Turno, veiculoId };
 }
 
 function urlDisponibilidade(data: string, turno: string): string {
   return `/reservas/disponibilidade?data=${encodeURIComponent(data)}&turno=${turno}`;
-}
-
-function mensagemDe(erro: unknown): string {
-  return erro instanceof ErroApi ? erro.message : 'Erro inesperado. Tente novamente.';
-}
-
-/** 'YYYY-MM-DD' → 'Seg\n14/10'. Dividido em duas linhas no botão. */
-function dowCurto(data: string): string {
-  const d = new Date(`${data}T00:00:00.000Z`);
-  const dow = new Intl.DateTimeFormat('pt-BR', { weekday: 'short', timeZone: 'UTC' })
-    .format(d)
-    .replace(/\./g, '');
-  return dow.charAt(0).toUpperCase() + dow.slice(1);
-}
-
-function diaMes(data: string): string {
-  return `${data.slice(8, 10)}/${data.slice(5, 7)}`;
 }
 
 export function NovaReserva() {
@@ -62,6 +46,10 @@ export function NovaReserva() {
   const [passo, setPasso] = useState<1 | 2 | 3>(pre ? 2 : 1);
   const [datas, setDatas] = useState<string[] | undefined>(undefined);
   const [erro, setErro] = useState<string | null>(null);
+  // Falhas de carga ficam à parte: "Carregando…" para sempre ou "Nenhum veículo cadastrado"
+  // diriam ao servidor uma coisa falsa (a mensagem do erro já aparece no alerta acima).
+  const [falhaDatas, setFalhaDatas] = useState(false);
+  const [falhaVeiculos, setFalhaVeiculos] = useState(false);
   const campos = useErrosDeCampo();
 
   const [data, setData] = useState(pre?.data ?? '');
@@ -76,7 +64,10 @@ export function NovaReserva() {
   useEffect(() => {
     api<{ datas: string[] }>('/reservas/datas-permitidas')
       .then((r) => setDatas(r.datas))
-      .catch((e) => setErro(mensagemDe(e)));
+      .catch((e) => {
+        setErro(mensagemDe(e));
+        setFalhaDatas(true);
+      });
   }, []);
 
   // Com preenchimento, já carrega os veículos da data/turno trazidos pela agenda. Se o carro
@@ -95,6 +86,7 @@ export function NovaReserva() {
       .catch((e) => {
         if (!ativo) return;
         setErro(mensagemDe(e));
+        setFalhaVeiculos(true);
         setVeiculos([]);
         setVeiculoId(null);
       });
@@ -109,11 +101,13 @@ export function NovaReserva() {
   async function carregarDisponibilidade() {
     setVeiculos(undefined);
     setVeiculoId(null);
+    setFalhaVeiculos(false);
     try {
       const resp = await api<{ veiculos: VeiculoDisponivel[] }>(urlDisponibilidade(data, turno));
       setVeiculos(resp.veiculos);
     } catch (e) {
       setErro(mensagemDe(e));
+      setFalhaVeiculos(true);
       setVeiculos([]);
     }
   }
@@ -200,7 +194,9 @@ export function NovaReserva() {
         <section className="pilha">
           <div className="rotulo">
             Data
-            {datas === undefined ? (
+            {falhaDatas ? (
+              <div className="vazio">Não foi possível carregar as datas.</div>
+            ) : datas === undefined ? (
               <div className="vazio" role="status">
                 Carregando datas…
               </div>
@@ -217,7 +213,7 @@ export function NovaReserva() {
                     className={data === d ? 'botao-data ativo' : 'botao-data'}
                     onClick={() => setData(d)}
                   >
-                    <span className="botao-data-dow">{dowCurto(d)}</span>
+                    <span className="botao-data-dow">{diaSemanaCurto(d)}</span>
                     <span className="botao-data-dm">{diaMes(d)}</span>
                   </button>
                 ))}
@@ -267,7 +263,21 @@ export function NovaReserva() {
 
           <div className="rotulo">
             Escolha o veículo
-            {veiculos === undefined ? (
+            {falhaVeiculos ? (
+              <div className="vazio">
+                Não foi possível carregar os veículos.{' '}
+                <button
+                  type="button"
+                  className="botao-link"
+                  onClick={() => {
+                    setErro(null);
+                    void carregarDisponibilidade();
+                  }}
+                >
+                  Tentar de novo
+                </button>
+              </div>
+            ) : veiculos === undefined ? (
               <div className="vazio" role="status">
                 Carregando veículos…
               </div>
@@ -317,7 +327,7 @@ export function NovaReserva() {
               <input
                 className="campo"
                 type="text"
-                maxLength={200}
+                maxLength={DESTINO_MAX}
                 placeholder="Ex.: Escola Municipal Santa Rita"
                 value={destino}
                 onChange={(e) => setDestino(e.target.value)}

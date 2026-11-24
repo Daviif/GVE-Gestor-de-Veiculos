@@ -229,3 +229,95 @@ describe('POST /usuarios/:id/redefinir-senha', () => {
     expect(log).toMatchObject({ entidade: 'usuario', entidadeId: alvo.id });
   });
 });
+
+/** Segundo administrador já logado, para os testes de RC09. */
+async function criarOutroAdmin() {
+  const usuario = await prisma.usuario.create({
+    data: {
+      nome: 'Beatriz Admin',
+      email: 'bia@gve.local',
+      cpf: '39053344705',
+      senhaHash: await gerarHashSenha(SENHA),
+      perfil: 'ADMINISTRADOR',
+      trocaSenhaObrigatoria: false,
+    },
+  });
+  const agente = request.agent(app);
+  await agente.post('/api/v1/auth/login').send({ login: usuario.email, senha: SENHA }).expect(200);
+  return { agente, usuario };
+}
+
+function dadosDe(u: { nome: string; email: string; cpf: string }, perfil: string) {
+  return { nome: u.nome, email: u.email, cpf: u.cpf, perfil };
+}
+
+describe('RC09: sempre há um administrador ativo', () => {
+  it('o administrador não altera o próprio perfil', async () => {
+    const { agente, usuario: admin } = await entrarComo('ADMINISTRADOR');
+    const resposta = await agente
+      .put(`/api/v1/usuarios/${admin.id}`)
+      .send(dadosDe(admin, 'SERVIDOR'));
+    expect(resposta.status).toBe(409);
+    expect(resposta.body.erro).toMatchObject({ codigo: 'OPERACAO_INVALIDA', campo: 'perfil' });
+    const salvo = await prisma.usuario.findUniqueOrThrow({ where: { id: admin.id } });
+    expect(salvo.perfil).toBe('ADMINISTRADOR');
+  });
+
+  it('o administrador edita o próprio nome mantendo o perfil', async () => {
+    const { agente, usuario: admin } = await entrarComo('ADMINISTRADOR');
+    const resposta = await agente
+      .put(`/api/v1/usuarios/${admin.id}`)
+      .send({ ...dadosDe(admin, 'ADMINISTRADOR'), nome: 'Admin Renomeado' });
+    expect(resposta.status).toBe(200);
+    expect(resposta.body.usuario.nome).toBe('Admin Renomeado');
+  });
+
+  it('rebaixa outro administrador quando sobra um', async () => {
+    const { agente } = await entrarComo('ADMINISTRADOR');
+    const { usuario: bia } = await criarOutroAdmin();
+    const resposta = await agente.put(`/api/v1/usuarios/${bia.id}`).send(dadosDe(bia, 'SERVIDOR'));
+    expect(resposta.status).toBe(200);
+    expect(resposta.body.usuario.perfil).toBe('SERVIDOR');
+  });
+
+  it('dois administradores se rebaixando ao mesmo tempo: só um consegue', async () => {
+    const { agente: agenteAdmin, usuario: admin } = await entrarComo('ADMINISTRADOR');
+    const { agente: agenteBia, usuario: bia } = await criarOutroAdmin();
+
+    const respostas = await Promise.all([
+      agenteAdmin.put(`/api/v1/usuarios/${bia.id}`).send(dadosDe(bia, 'SERVIDOR')),
+      agenteBia.put(`/api/v1/usuarios/${admin.id}`).send(dadosDe(admin, 'SERVIDOR')),
+    ]);
+    // O segundo encontra o rebaixamento do primeiro: ou sobraria ninguém (409), ou quem
+    // pede já não é administrador (403).
+    expect(respostas.map((r) => r.status).sort()).toEqual(
+      respostas.some((r) => r.status === 403) ? [200, 403] : [200, 409],
+    );
+    expect(await prisma.usuario.count({ where: { perfil: 'ADMINISTRADOR', ativo: true } })).toBe(1);
+  });
+
+  it('dois administradores se desativando ao mesmo tempo: só um consegue', async () => {
+    const { agente: agenteAdmin, usuario: admin } = await entrarComo('ADMINISTRADOR');
+    const { agente: agenteBia, usuario: bia } = await criarOutroAdmin();
+
+    await Promise.all([
+      agenteAdmin.patch(`/api/v1/usuarios/${bia.id}/situacao`).send({ ativo: false }),
+      agenteBia.patch(`/api/v1/usuarios/${admin.id}/situacao`).send({ ativo: false }),
+    ]);
+    expect(await prisma.usuario.count({ where: { perfil: 'ADMINISTRADOR', ativo: true } })).toBe(1);
+  });
+});
+
+describe('RC10: mudar a situação duas vezes ao mesmo tempo', () => {
+  it('um duplo clique em Desativar grava um registro só', async () => {
+    const { agente } = await entrarComo('ADMINISTRADOR');
+    const alvo = await criarServidorLogado('carlos@gve.local', CPF_NOVO);
+
+    const respostas = await Promise.all([
+      agente.patch(`/api/v1/usuarios/${alvo.id}/situacao`).send({ ativo: false }),
+      agente.patch(`/api/v1/usuarios/${alvo.id}/situacao`).send({ ativo: false }),
+    ]);
+    expect(respostas.map((r) => r.status)).toEqual([200, 200]);
+    expect(await prisma.logAuditoria.count({ where: { acao: 'USUARIO_DESATIVADO' } })).toBe(1);
+  });
+});

@@ -44,7 +44,7 @@ const ERROS_DO_CORPO: Record<string, { status: number; codigo: string; mensagem:
   'encoding.unsupported': {
     status: 415,
     codigo: 'FORMATO_NAO_SUPORTADO',
-    mensagem: 'A compressão usada no corpo da requisição não é suportada.',
+    mensagem: 'Envie o corpo da requisição sem compressão.',
   },
   'request.aborted': {
     status: 400,

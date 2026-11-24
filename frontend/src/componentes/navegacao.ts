@@ -1,4 +1,4 @@
-/** Itens do menu. As telas ainda não implementadas abrem a página "Em construção". */
+/** Itens do menu. A tela de cada item da administração fica em `telasAdmin` (App.tsx). */
 export const itensMenu = [
   { caminho: '/', titulo: 'Minhas reservas', aba: 'Início' },
   { caminho: '/reservas/nova', titulo: 'Nova reserva', aba: 'Reservar' },

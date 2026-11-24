@@ -71,11 +71,11 @@ describe('corpo que não dá para ler', () => {
       'FORMATO_NAO_SUPORTADO',
     ],
     [
-      'com compressão corrompida',
+      'comprimido (inflate desligado)',
       'application/json',
-      { 'Content-Encoding': 'br' },
-      400,
-      'REQUISICAO_INVALIDA',
+      { 'Content-Encoding': 'gzip' },
+      415,
+      'FORMATO_NAO_SUPORTADO',
     ],
   ])(
     '%s: responde 4xx em português, sem registrar erro no servidor',

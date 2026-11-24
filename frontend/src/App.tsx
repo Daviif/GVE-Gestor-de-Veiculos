@@ -9,7 +9,6 @@ import { Feriados } from './paginas/admin/Feriados';
 import { Historico } from './paginas/admin/Historico';
 import { Usuarios } from './paginas/admin/Usuarios';
 import { Veiculos } from './paginas/admin/Veiculos';
-import { EmConstrucao } from './paginas/EmConstrucao';
 import { Login } from './paginas/Login';
 import { MinhaConta } from './paginas/MinhaConta';
 import { MinhasReservas } from './paginas/MinhasReservas';
@@ -17,8 +16,8 @@ import { NovaReserva } from './paginas/reservas/NovaReserva';
 import { TrocaSenha } from './paginas/TrocaSenha';
 import { ProvedorToast } from './toast/ProvedorToast';
 
-/** Telas da administração já prontas; as demais abrem "Em construção". */
-const telasAdmin: Partial<Record<(typeof itensAdmin)[number]['caminho'], ReactNode>> = {
+/** Tela de cada item do menu da administração. Item novo no menu sem tela aqui é erro de tipo. */
+const telasAdmin: Record<(typeof itensAdmin)[number]['caminho'], ReactNode> = {
   '/admin/usuarios': <Usuarios />,
   '/admin/veiculos': <Veiculos />,
   '/admin/feriados': <Feriados />,
@@ -40,11 +39,7 @@ export function Rotas() {
           <Route path="/conta" element={<MinhaConta />} />
           <Route element={<RotaProtegida perfil="ADMINISTRADOR" />}>
             {itensAdmin.map((item) => (
-              <Route
-                key={item.caminho}
-                path={item.caminho}
-                element={telasAdmin[item.caminho] ?? <EmConstrucao />}
-              />
+              <Route key={item.caminho} path={item.caminho} element={telasAdmin[item.caminho]} />
             ))}
           </Route>
         </Route>
